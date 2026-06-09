@@ -36,6 +36,7 @@
 
 # Visual Studio cache directory
 .vs/
+.vsconfig
 
 # Gradle cache directory
 .gradle/
@@ -104,3 +105,7 @@ InitTestScene*.unity*
 
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
+
+# Unity crash/recovery scenes are local editor state, not source assets.
+/[Aa]ssets/_Recovery/
+/[Aa]ssets/_Recovery.meta

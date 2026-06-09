@@ -1,0 +1,27 @@
+# Unity text assets should stay stable across Windows/macOS checkouts.
+.gitattributes text eol=lf
+*.cs text eol=lf
+*.shader text eol=lf
+*.cginc text eol=lf
+*.hlsl text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.meta text eol=lf
+*.unity text eol=lf
+*.prefab text eol=lf
+*.asset text eol=lf
+*.mat text eol=lf
+*.controller text eol=lf
+*.anim text eol=lf
+*.overrideController text eol=lf
+
+# Binary assets.
+*.fbx binary
+*.onnx binary
+*.sentis binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.psd binary
+*.ttf binary
