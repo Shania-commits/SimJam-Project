@@ -26,15 +26,24 @@ namespace SimJam.BarrelSimulator
 
         public void SetDebugLabelVisible(bool isVisible)
         {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (isVisible)
             {
                 EnsureDebugLabel();
+                UpdateDebugLabel();
             }
 
             if (debugLabel != null)
             {
                 debugLabel.gameObject.SetActive(isVisible);
             }
+#else
+            // Release builds must never reveal radiation values above barrels.
+            if (debugLabel != null)
+            {
+                debugLabel.gameObject.SetActive(false);
+            }
+#endif
         }
 
         private void LateUpdate()
