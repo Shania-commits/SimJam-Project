@@ -45,6 +45,58 @@ If it stays on a room-data message for more than about 20 seconds:
 
 The app now shows clearer room-load messages, including permission failures, missing Quest room scans, poor lighting, and MRUK load failures.
 
+## Launch Full VR
+
+1. When the app opens in the headset, choose `SimJam Scenes`.
+2. Choose `BasicVRRoom`.
+3. The scene creates a 20 ft x 20 ft office-style VR room and immediately spawns a randomized scenario.
+
+`BasicVRRoom` does not need passthrough, room scanning, Spatial Data permission, or an external server. It is a plain VR scene for testing randomized barrel placement, visibility, walkability, and locomotion.
+
+## Full VR Controls
+
+- `A`: regenerate the whole randomized scenario.
+- `B`: clear the current scenario.
+- `X`: randomize count values only.
+- Left thumbstick: smooth movement.
+- Right thumbstick left/right: snap turn.
+- Right trigger: teleport to the visible floor target.
+
+Full-VR barrels are fixed and non-grabbable. The scenario generator may place fewer than the requested random count if a high-count layout would hide barrels or block walkable paths.
+
+## Launch Radiation Lab (identiFINDER training scene)
+
+1. When the app opens in the headset, choose `SimJam Scenes`.
+2. Choose `RadiationLabRoom`.
+3. You spawn in the home room. The identiFINDER detector sits on a lit pedestal nearby.
+4. Exactly ONE barrel in the lab room hides a radioactive source each run. There is no
+   visual difference — find it with the detector readings, geiger clicks, and haptics.
+
+`RadiationLabRoom` is the radiation-training variant of `BasicVRRoom`. The original
+`BasicVRRoom` scene is unchanged and still available.
+
+## Radiation Lab Controls
+
+- Grip near the identiFINDER: pick it up (either hand). Release grip: drop it.
+- Grip near a door knob: grab the door, then swing it open or shut with your hand.
+  Bring it near the frame and it latches closed with a click.
+- The detector screen shows live CPS, uSv/h, and a bargraph. Geiger click rate and
+  controller vibration scale with the reading; vibration stays OFF until the signal is
+  strong (close + roughly aimed), so distance alone gives no hint.
+- Readings obey inverse-square falloff and shielding: a barrel (or wall/door/table)
+  between you and the source noticeably weakens the reading.
+- `A`: regenerate the whole randomized scenario (new layout + new hidden source).
+- `B`: clear the current scenario.
+- `X`: re-roll radiation values and move the hidden source to a different barrel.
+- `Y`: toggle debug count labels (works only in the Editor or Development builds;
+  release builds never show them).
+- Left thumbstick: smooth movement. Right thumbstick left/right: snap turn.
+  Right trigger: teleport to the visible floor target.
+
+Editor desktop test (no headset): enter Play Mode in `RadiationLabRoom` and press `G`
+to mount the detector to the camera; move the Scene/Game camera around to watch the
+readings react.
+
 ## V1 Test
 
 1. Choose `MultiObjectDetection` from the passthrough sample scenes.

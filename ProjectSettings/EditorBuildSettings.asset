@@ -24,6 +24,12 @@ EditorBuildSettings:
     path: Assets/Simulation/Scenes/RandomRoomBarrels.unity
     guid: 58e41df1c35e4a1c9d2be9acb36fc3a2
   - enabled: 1
+    path: Assets/Simulation/Scenes/BasicVRRoom.unity
+    guid: 771a12439d31b244794e2f4fe41a001b
+  - enabled: 1
+    path: Assets/Simulation/Scenes/RadiationLabRoom.unity
+    guid: 4a7c2e9b1f8d35a6c4b3a2918d7e6f54
+  - enabled: 1
     path: Assets/PassthroughCameraApiSamples/ShaderSample/ShaderSample.unity
     guid: 708e8dca6055146b28afe2481f141457
   m_configObjects:
