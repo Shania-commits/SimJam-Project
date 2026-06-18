@@ -27,8 +27,8 @@ public class InputManager : MonoBehaviour
         }
     }
 
-    public static bool IsButtonADownOrPinchStarted() => OVRInput.GetDown(OVRInput.RawButton.A) || Instance.GetPinchStarted(OVRPlugin.HandFingerPinch.Index);
-    public static bool IsButtonBDownOrMiddleFingerPinchStarted() => OVRInput.GetDown(OVRInput.RawButton.B) || Instance.GetPinchStarted(OVRPlugin.HandFingerPinch.Middle);
+    public static bool IsButtonADownOrPinchStarted() => OVRInput.GetDown(OVRInput.RawButton.A) || (Instance != null && Instance.GetPinchStarted(OVRPlugin.HandFingerPinch.Index));
+    public static bool IsButtonBDownOrMiddleFingerPinchStarted() => OVRInput.GetDown(OVRInput.RawButton.B) || (Instance != null && Instance.GetPinchStarted(OVRPlugin.HandFingerPinch.Middle));
     public static bool IsButtonXDown() => OVRInput.GetDown(OVRInput.RawButton.X);
     public static bool IsButtonYDown() => OVRInput.GetDown(OVRInput.RawButton.Y);
     public static bool IsRightThumbstickUpDown() => OVRInput.GetDown(OVRInput.RawButton.RThumbstickUp);
