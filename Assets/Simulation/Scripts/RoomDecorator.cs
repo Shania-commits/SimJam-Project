@@ -27,8 +27,6 @@ namespace SimJam.BarrelSimulator
             Material exitMat = createMaterial(Color.white, "Exit Sign", 0f, 0.2f, ProceduralTextureLibrary.ExitSign128, new Color(0.05f, 0.5f, 0.15f));
             Material hazardMat = createMaterial(Color.white, "Hazard Stripe", 0f, 0.3f, ProceduralTextureLibrary.HazardStripe128, null);
             Material conduitMat = createMaterial(new Color(0.55f, 0.56f, 0.58f), "Conduit", 0.4f, 0.6f, null, null);
-            Material radPosterMat = createMaterial(Color.white, "Radiation Poster", 0f, 0.2f, ProceduralTextureLibrary.RadiationPoster256, null);
-            Material safePosterMat = createMaterial(Color.white, "Safety Poster", 0f, 0.2f, ProceduralTextureLibrary.SafetyPoster256, null);
 
             // Baseboards.
             CreatePart(PrimitiveType.Cube, "Baseboard North", roomRoot, new Vector3(0f, 0.05f, d * 0.5f - 0.06f), new Vector3(w, 0.10f, 0.018f), Quaternion.identity, baseboardMat, false);
@@ -63,12 +61,6 @@ namespace SimJam.BarrelSimulator
             CreatePart(PrimitiveType.Cube, "Junction Box A", roomRoot, new Vector3(-w * 0.5f + 0.4f, conduitY, d * 0.5f - 0.095f), new Vector3(0.14f, 0.14f, 0.09f), Quaternion.identity, conduitMat, false);
             CreatePart(PrimitiveType.Cube, "Junction Box B", roomRoot, new Vector3(-w * 0.5f + 0.55f, conduitY, d * 0.5f - 0.095f), new Vector3(0.14f, 0.14f, 0.09f), Quaternion.identity, conduitMat, false);
             CreatePart(PrimitiveType.Cube, "Junction Box C", roomRoot, new Vector3(-w * 0.5f + 0.095f, conduitY, d * 0.5f - 0.5f), new Vector3(0.14f, 0.14f, 0.09f), Quaternion.Euler(0f, 90f, 0f), conduitMat, false);
-
-            // Wall posters.
-            Vector3 posterScale = new Vector3(0.5f, 0.7f, 0.012f);
-            CreatePart(PrimitiveType.Cube, "Radiation Poster (East)", roomRoot, new Vector3(w * 0.5f - 0.07f, 1.5f, 0f), posterScale, Quaternion.Euler(0f, 90f, 0f), radPosterMat, false);
-            CreatePart(PrimitiveType.Cube, "Safety Poster (West)", roomRoot, new Vector3(-w * 0.5f + 0.07f, 1.5f, 0f), posterScale, Quaternion.Euler(0f, 90f, 0f), safePosterMat, false);
-            CreatePart(PrimitiveType.Cube, "Radiation Poster (North)", roomRoot, new Vector3(0f, 1.5f, d * 0.5f - 0.07f), posterScale, Quaternion.identity, radPosterMat, false);
         }
 
         public static void DecorateSpawnRoom(Transform roomRoot, Vector3 spawnCenter, Vector2 spawnSizeMeters, float wallHeight, float sharedWallZ, MaterialFactory createMaterial)
@@ -79,7 +71,6 @@ namespace SimJam.BarrelSimulator
 
             Material baseboardMat = createMaterial(new Color(0.20f, 0.21f, 0.22f), "Baseboard", 0f, 0.2f, null, null);
             Material woodMat = createMaterial(new Color(0.32f, 0.20f, 0.10f), "Door Frame Wood", 0f, 0.3f, ProceduralTextureLibrary.WoodGrain256, null);
-            Material safePosterMat = createMaterial(Color.white, "Safety Poster", 0f, 0.2f, ProceduralTextureLibrary.SafetyPoster256, null);
 
             // Baseboards.
             CreatePart(PrimitiveType.Cube, "Spawn Baseboard South", roomRoot, new Vector3(spawnCenter.x, floorY + 0.05f, spawnCenter.z - d * 0.5f + 0.06f), new Vector3(w, 0.10f, 0.018f), Quaternion.identity, baseboardMat, false);
@@ -108,9 +99,6 @@ namespace SimJam.BarrelSimulator
             CreatePart(PrimitiveType.Cube, "Door Jamb Left (Spawn)", roomRoot, new Vector3(-jambX, floorY + jambHeight * 0.5f, frameZ), new Vector3(0.07f, jambHeight, 0.07f), Quaternion.identity, woodMat, false);
             CreatePart(PrimitiveType.Cube, "Door Jamb Right (Spawn)", roomRoot, new Vector3(jambX, floorY + jambHeight * 0.5f, frameZ), new Vector3(0.07f, jambHeight, 0.07f), Quaternion.identity, woodMat, false);
             CreatePart(PrimitiveType.Cube, "Door Lintel (Spawn)", roomRoot, new Vector3(0f, floorY + lastDoorwayHeight + 0.005f, frameZ), new Vector3(lastDoorwayWidth + 0.18f, 0.07f, 0.07f), Quaternion.identity, woodMat, false);
-
-            // Poster on the spawn room's west wall.
-            CreatePart(PrimitiveType.Cube, "Safety Poster (Spawn West)", roomRoot, new Vector3(spawnCenter.x - w * 0.5f + 0.07f, floorY + 1.5f, spawnCenter.z), new Vector3(0.5f, 0.7f, 0.012f), Quaternion.Euler(0f, 90f, 0f), safePosterMat, false);
         }
 
         public static GameObject BuildDetectorPedestal(Transform parent, Vector3 floorPosition, MaterialFactory createMaterial)

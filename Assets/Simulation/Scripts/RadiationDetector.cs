@@ -126,9 +126,11 @@ namespace SimJam.BarrelSimulator
             }
 
             // Scale the haptic gate with the strongest registered source so vibration always
-            // starts at roughly the same distance (~2 m aimed, unshielded) no matter how hot
-            // the source rolled — a fixed CPS floor would let a strong source buzz the
-            // controller from across both rooms, giving its location away.
+            // starts at roughly the same distance no matter how hot the source rolled — a fixed
+            // CPS floor would let a strong source buzz the controller from across both rooms,
+            // giving its location away. The 2.0x multiplier means the buzz only kicks in within
+            // ~0.7 m aimed/unshielded (reading ~= activity / d^2), a tight confirmation radius
+            // rather than a long-range hint.
             var floorCps = 15f;
             var sources = RadiationField.Sources;
             for (var i = 0; i < sources.Count; i++)
@@ -136,7 +138,7 @@ namespace SimJam.BarrelSimulator
                 var source = sources[i];
                 if (source != null)
                 {
-                    floorCps = Mathf.Max(floorCps, source.ActivityCpsAt1m * 0.25f);
+                    floorCps = Mathf.Max(floorCps, source.ActivityCpsAt1m * 2.0f);
                 }
             }
 

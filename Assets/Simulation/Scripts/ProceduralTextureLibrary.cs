@@ -15,6 +15,9 @@ namespace SimJam.BarrelSimulator
         private static Texture2D s_radiationPoster256;
         private static Texture2D s_safetyPoster256;
         private static Texture2D s_detectorPlaque256;
+        private static Texture2D s_barrelLabel5;
+        private static Texture2D s_barrelLabel30;
+        private static Texture2D s_barrelLabel55;
 
         public static Texture2D Concrete512
         {
@@ -133,6 +136,45 @@ namespace SimJam.BarrelSimulator
                     s_detectorPlaque256 = BuildDetectorPlaque256();
                 }
                 return s_detectorPlaque256;
+            }
+        }
+
+        // A barrel size label/sticker ("5 GAL" / "30 GAL" / "55 GAL"). Identical across all
+        // barrels of a size, so it conveys only the size (already visible) and never which
+        // barrel is the hidden source.
+        public static Texture2D BarrelLabel5
+        {
+            get
+            {
+                if (s_barrelLabel5 == null)
+                {
+                    s_barrelLabel5 = BuildBarrelLabel("5 GAL", 5051);
+                }
+                return s_barrelLabel5;
+            }
+        }
+
+        public static Texture2D BarrelLabel30
+        {
+            get
+            {
+                if (s_barrelLabel30 == null)
+                {
+                    s_barrelLabel30 = BuildBarrelLabel("30 GAL", 3037);
+                }
+                return s_barrelLabel30;
+            }
+        }
+
+        public static Texture2D BarrelLabel55
+        {
+            get
+            {
+                if (s_barrelLabel55 == null)
+                {
+                    s_barrelLabel55 = BuildBarrelLabel("55 GAL", 5519);
+                }
+                return s_barrelLabel55;
             }
         }
 
@@ -469,6 +511,60 @@ namespace SimJam.BarrelSimulator
             DrawText(pixels, size, size, "RADIATION", 128, 150, 2, amber);
             DrawText(pixels, size, size, "DETECTOR", 128, 106, 2, amber);
             return CreateTexture("DetectorPlaqueProc256", size, pixels, TextureWrapMode.Clamp);
+        }
+
+        private static Texture2D BuildBarrelLabel(string sizeText, int seed)
+        {
+            const int size = 256;
+            var rng = new System.Random(seed);
+            var pixels = new Color32[size * size];
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    // Warm manila paper-label background with faint grain.
+                    float v = 0.90f + ((float)rng.NextDouble() - 0.5f) * 0.05f;
+                    pixels[y * size + x] = MakeColor(v, v * 0.97f, v * 0.88f);
+                }
+            }
+
+            Color32 ink = MakeColor(0.11f, 0.11f, 0.13f);
+            Color32 faint = MakeColor(0.32f, 0.32f, 0.34f);
+            Color32 header = MakeColor(0.12f, 0.22f, 0.42f);
+            Color32 paper = MakeColor(0.95f, 0.95f, 0.97f);
+
+            // Bordered placard.
+            FillRect(pixels, size, 0, 0, size, 11, ink);
+            FillRect(pixels, size, 0, size - 11, size, 11, ink);
+            FillRect(pixels, size, 0, 0, 11, size, ink);
+            FillRect(pixels, size, size - 11, 0, 11, size, ink);
+
+            // Header band + big size text + small spec line.
+            FillRect(pixels, size, 11, size - 60, size - 22, 49, header);
+            DrawText(pixels, size, size, "STEEL DRUM", 128, size - 36, 2, paper);
+            DrawText(pixels, size, size, sizeText, 128, 122, 6, ink);
+            DrawText(pixels, size, size, "UN 1A2 Y", 128, 42, 2, faint);
+
+            return CreateTexture("BarrelLabel" + sizeText.Replace(" ", string.Empty), size, pixels, TextureWrapMode.Clamp);
+        }
+
+        private static void FillRect(Color32[] pixels, int texSize, int x0, int y0, int w, int h, Color32 color)
+        {
+            for (int y = y0; y < y0 + h; y++)
+            {
+                if (y < 0 || y >= texSize)
+                {
+                    continue;
+                }
+                for (int x = x0; x < x0 + w; x++)
+                {
+                    if (x < 0 || x >= texSize)
+                    {
+                        continue;
+                    }
+                    pixels[y * texSize + x] = color;
+                }
+            }
         }
 
         private static Texture2D CreateTexture(string name, int size, Color32[] pixels, TextureWrapMode wrapMode)
