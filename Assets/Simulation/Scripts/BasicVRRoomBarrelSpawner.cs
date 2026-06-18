@@ -1,22 +1,15 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Rendering;
 using UnityEngine.Serialization;
 
 namespace SimJam.BarrelSimulator
 {
-    /// Radiation-training variant of BasicVRRoomBarrelSpawner (which is kept untouched as a
-    /// working reference). Adds: consistent per-type barrel sizing, exactly one hidden
-    /// radioactive source per run, radiation physics with shielding, a grabbable identiFINDER
-    /// detector presented on a pedestal, physically grabbed door, visible IK arms, and a
-    /// procedural visual overhaul tuned for Quest 3.
-    public class RadiationLabRoomSpawner : MonoBehaviour
+    public class BasicVRRoomBarrelSpawner : MonoBehaviour
     {
         private const float FeetToMeters = 0.3048f;
         private const float DefaultRoomFeet = 20f;
-
-        private static readonly string[] s_isotopeNames = { "Cs-137", "Co-60", "Ir-192", "Am-241" };
+        private const float DefaultRoomMeters = DefaultRoomFeet * FeetToMeters;
 
         private enum BarrelSize
         {
@@ -122,29 +115,12 @@ namespace SimJam.BarrelSimulator
         [SerializeField, Min(1.5f)] private float m_doorwayHeight = 2.1f;
         [SerializeField, Range(-130f, 130f)] private float m_doorOpenAngle = -95f;
         [SerializeField, Min(0.05f)] private float m_doorKnobInteractionRadius = 0.24f;
-        [SerializeField, Min(1f)] private float m_doorFollowSharpness = 12f;
-        [SerializeField, Range(2f, 30f)] private float m_doorLatchAngle = 10f;
-        [SerializeField, Range(20f, 90f)] private float m_doorNavigationOpenAngle = 60f;
+        [SerializeField, Min(0.05f)] private float m_doorToggleCooldown = 0.35f;
+        [SerializeField, Min(15f)] private float m_doorSwingSpeed = 150f;
 
         [Header("Controller hand visuals")]
         [SerializeField] private bool m_showControllerHands = true;
         [SerializeField, Min(0.1f)] private float m_controllerHandScale = 1f;
-        [SerializeField] private bool m_showArms = true;
-        // Optional: the SDK's authentic Meta/Lit hand material (BasicHandMaterial). Assigned in
-        // the scene; if left null the hands fall back to a solid Standard skin material.
-        [SerializeField] private Material m_metaHandMaterial;
-
-        [Header("Custom arms (Mixamo FBX)")]
-        // Assign the imported arms FBX/prefab here to REPLACE the Meta hands + procedural arms with
-        // a skinned mesh IK'd to the controllers. Leave null to keep the default hands. Tune the
-        // offsets on-device: chest offset positions the torso under the headset, body-yaw flips the
-        // facing if the model imports backward (try 180), and the hand options match the wrist to
-        // the controller (off => the hand simply follows the forearm).
-        [SerializeField] private GameObject m_customArmsPrefab;
-        [SerializeField] private Vector3 m_customArmsChestOffset = new Vector3(0f, -0.13f, -0.05f);
-        [SerializeField, Range(-180f, 180f)] private float m_customArmsBodyYawOffset;
-        [SerializeField] private bool m_customArmsMatchHandToController;
-        [SerializeField] private Vector3 m_customArmsHandEulerOffset;
 
         [Header("Barrel prefabs")]
         [SerializeField] private BarrelPrefabSet m_barrelPrefabs;
@@ -153,27 +129,8 @@ namespace SimJam.BarrelSimulator
         [SerializeField] private Vector3 m_barrel30ModelScale = new Vector3(0.14f, 0.14f, 0.14f);
         [SerializeField] private Vector3 m_barrel5ModelScale = new Vector3(0.07f, 0.07f, 0.07f);
 
-        [Header("Hidden radiation source")]
-        [SerializeField, Min(1f)] private float m_minSourceActivityCps = 1500f;
-        [SerializeField, Min(1f)] private float m_maxSourceActivityCps = 30000f;
-
-        [Header("Detector")]
-        [SerializeField, Min(0.05f)] private float m_detectorGrabRadius = 0.18f;
-        [SerializeField] private Vector3 m_pedestalOffsetFromSpawnCenter = new Vector3(1.1f, 0f, 0.45f);
-
-        [Header("Game loop")]
-        // Player presses the wall START button to randomize a round, then aims the detector at the
-        // barrel they suspect and presses A to submit. They get m_maxTries attempts per round.
-        [SerializeField, Min(1)] private int m_maxTries = 2;
-        [SerializeField, Min(0.04f)] private float m_startButtonPressRadius = 0.1f;
-        [SerializeField, Min(0.5f)] private float m_guessRayLength = 12f;
-        // Half-angle of the forgiving "aim cone" for submitting a guess: the player only needs to
-        // point roughly at a drum, not pixel-perfectly. The closest-to-centre barrel within this
-        // cone is the pick.
-        [SerializeField, Range(4f, 35f)] private float m_guessConeAngle = 16f;
-
         [Header("Scenario randomization")]
-        [SerializeField, Min(1)] private int m_minBarrels = 11;
+        [SerializeField, Min(1)] private int m_minBarrels = 1;
         [SerializeField, Min(1)] private int m_maxBarrels = 45;
         [SerializeField, Min(0)] private int m_minTables;
         [SerializeField, Min(0)] private int m_maxTables = 4;
@@ -190,28 +147,18 @@ namespace SimJam.BarrelSimulator
         [SerializeField, Min(0.05f)] private float m_floorBarrelSpacing = 0.64f;
         [SerializeField, Min(0.01f)] private float m_tableBarrelSpacing = 0.34f;
         [SerializeField, Min(0.01f)] private float m_shelfBarrelSpacing = 0.28f;
-        // Tight per-barrel walk/teleport keep-out so the player can step right up to a barrel to
-        // scan it (net keep-out ~= barrel radius + this) without standing inside the cylinder.
-        [SerializeField, Min(0.01f)] private float m_barrelClearance = 0.05f;
 
         [Header("Shelf asset")]
         [SerializeField] private GameObject m_wallShelfPrefab;
         [SerializeField, Min(0.001f)] private float m_shelfSurfaceClearance = 0.015f;
 
         [Header("Locomotion")]
-        [SerializeField] private bool m_enableSmoothMove = false;
+        [SerializeField] private bool m_enableSmoothMove = true;
         [SerializeField] private bool m_enableTeleport = true;
         [SerializeField, Min(0.1f)] private float m_smoothMoveSpeed = 1.35f;
         [SerializeField, Min(5f)] private float m_snapTurnDegrees = 30f;
         [SerializeField, Min(0.05f)] private float m_snapTurnCooldown = 0.3f;
         [SerializeField, Min(0.05f)] private float m_thumbstickDeadzone = 0.22f;
-        // Teleport reliability: aim snaps to the nearest standable spot within a small search ring
-        // instead of being rejected outright, so near-wall/near-edge aims always land. m_edgeMargin
-        // is how close to a wall you can stand (was a 0.36 m dead-zone); keep it < m_playerRadius.
-        [SerializeField, Min(0.05f)] private float m_edgeMargin = 0.2f;
-        [SerializeField, Min(0.04f)] private float m_teleportSnapStep = 0.12f;
-        [SerializeField, Min(2f)] private float m_maxTeleportDistance = 16f;
-        [SerializeField, Min(1f)] private float m_teleportMarkerSmoothing = 18f;
 
         [Header("Fallback counts")]
         [SerializeField, Min(1)] private int m_fallbackCountPoolSize = 2048;
@@ -225,14 +172,8 @@ namespace SimJam.BarrelSimulator
         private readonly List<SpawnSlot> m_spawnSlots = new();
         private readonly List<PlacedBarrel> m_placedBarrels = new();
         private readonly List<ObstacleRect> m_navigationObstacles = new();
-        // Floor-barrel keep-outs are kept separate from m_navigationObstacles so they can use the
-        // tight m_barrelClearance padding (not the full player-radius furniture padding).
-        private readonly List<ObstacleRect> m_barrelObstacles = new();
         private readonly List<Material> m_runtimeMaterials = new();
         private readonly Dictionary<string, Material> m_materialCache = new();
-        private readonly Dictionary<BarrelSize, Vector3> m_fittedScaleCache = new();
-        private readonly Dictionary<BarrelSize, Material[]> m_barrelTintVariants = new();
-        private readonly Dictionary<BarrelSize, Mesh> m_barrelLabelMeshes = new();
 
         private int[] m_fallbackCountPool;
         private Transform m_cameraTransform;
@@ -244,59 +185,17 @@ namespace SimJam.BarrelSimulator
         private Renderer m_teleportMarkerRenderer;
         private Material m_validTeleportMaterial;
         private Material m_invalidTeleportMaterial;
-        private GameObject m_messagePanel;
-        private TextMesh m_messageText;
-        private Material m_messageBackingMaterial;
-        private Transform m_messageBacking;
-        private float m_messageStartTime;
-        private float m_messageHoldDuration;
-        private Color m_messageColor = new Color(1f, 0.86f, 0.2f);
-        private bool m_messageResizePending;
         private Transform m_doorPivot;
         private Transform m_labDoorKnob;
         private Transform m_spawnDoorKnob;
         private float m_doorCurrentAngle;
-        private OVRInput.Controller m_doorGrabController = OVRInput.Controller.None;
-        private OVRInput.Controller m_lastDoorGrabController = OVRInput.Controller.None;
-        private Transform m_doorGrabAnchor;
-        private float m_doorGrabAngleOffset;
-        private bool m_leftPulseActive;
-        private float m_leftPulseEndTime;
-        private bool m_rightPulseActive;
-        private float m_rightPulseEndTime;
+        private bool m_isDoorOpen;
+        private float m_nextDoorToggleTime;
         private GameObject m_leftHandVisual;
         private GameObject m_rightHandVisual;
-        private ProceduralArmRig m_armRig;
-        private GameObject m_customArmsInstance;
-        private MixamoArmRig m_customArmRig;
-        private GameObject m_detectorRoot;
-        private GrabbableTool m_detectorGrabTool;
-        private Transform m_detectorSensorTip;
-        private Vector3 m_detectorHomePosition;
-        private Quaternion m_detectorHomeRotation = Quaternion.identity;
-        private ObstacleRect m_pedestalFootprint;
-        private bool m_hasPedestal;
-        private RadiationSource m_hotSource;
-
-        // --- Game loop (Waiting -> Playing -> Resolved) ---
-        // The wall START button drives randomization; the freed-up A button submits a guess by
-        // pointing the detector at a barrel. Public hooks below let a designer port in their own UI.
-        private SimulationPhase m_phase = SimulationPhase.Waiting;
-        private int m_triesUsed;
-        private GameObject m_startButtonRoot;
-        private Transform m_startButtonCap;
-        private TextMesh m_startButtonLabel;
-        private Material m_startButtonMaterial;
-        private Vector3 m_startButtonCapRestPosition;
-        private bool m_startButtonArmed = true;
-
         private Vector3 m_currentTeleportTarget;
         private bool m_hasValidTeleportTarget;
-        private Vector3 m_teleportMarkerSmoothedPosition;
         private float m_nextSnapTurnTime;
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-        private bool m_debugLabelsVisible;
-#endif
 
         private Vector2 RoomSizeMeters => new(
             Mathf.Max(8f, m_roomSizeFeet.x) * FeetToMeters,
@@ -330,8 +229,6 @@ namespace SimJam.BarrelSimulator
             }
         }
 
-        private bool IsDoorOpenForNavigation => Mathf.Abs(m_doorCurrentAngle) >= m_doorNavigationOpenAngle;
-
         private void Awake()
         {
             m_cameraTransform = EnsureCameraRig();
@@ -339,270 +236,37 @@ namespace SimJam.BarrelSimulator
 
         private void Start()
         {
-            ConfigureAmbientLighting();
-
             if (m_buildRoomGeometry)
             {
                 BuildRoomGeometry();
             }
 
             EnsureControllerHandVisuals();
-            EnsureArmRig();
-            EnsureCustomArms();
-            EnsureDetector();
-            EnsureStartButton();
-
-            // Polished game loop: the lab stays empty until the player presses the wall START
-            // button. That press is now the ONLY thing that randomizes the round.
-            m_phase = SimulationPhase.Waiting;
-            RefreshStartButtonVisual();
-            SetStatus("Press the START button on the wall to begin.");
-            ShowMessage("Press START on the wall\nto begin a round", new Color(0.7f, 0.95f, 1f), 4f);
+            GenerateRun();
         }
 
         private void Update()
         {
             EnsureControllerHandVisuals();
-            EnsureArmRig();
-            EnsureCustomArms();
             HandleLocomotion();
-            HandleDoorGrab();
-            UpdateDoorMotion();
-            UpdateHapticPulse();
-            UpdateStartButton();
+            HandleDoorInteraction();
+            UpdateDoorSwing();
 
-            // A button (or hand pinch) submits a guess: whatever barrel the detector is aimed at
-            // is the player's answer. The A button no longer reshuffles the barrels — only the
-            // wall START button does. Submission is a no-op outside an active round.
             if (InputManager.IsButtonADownOrPinchStarted())
             {
-                SubmitGuess();
+                GenerateRun();
             }
 
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            // Dev-only helpers (not part of the player game loop): B re-rolls a round, X re-rolls
-            // counts + hidden source, Y toggles debug labels. Players can no longer change the
-            // layout once it is shuffled.
             if (InputManager.IsButtonBDownOrMiddleFingerPinchStarted())
             {
-                StartSimulation();
+                ClearScenario();
+                SetStatus("Scenario cleared.");
             }
 
             if (InputManager.IsButtonXDown())
             {
                 RandomizeRadiationCounts();
-                AssignHotSource();
             }
-
-            if (InputManager.IsButtonYDown())
-            {
-                m_debugLabelsVisible = !m_debugLabelsVisible;
-                foreach (var barrel in m_spawnedBarrels)
-                {
-                    if (barrel != null)
-                    {
-                        barrel.SetDebugLabelVisible(m_debugLabelsVisible);
-                    }
-                }
-            }
-#endif
-
-#if UNITY_EDITOR && ENABLE_INPUT_SYSTEM
-            // Keyboard fallbacks for testing in the editor without a headset: B = press START,
-            // N = submit the guess the camera/detector is aimed at.
-            if (UnityEngine.InputSystem.Keyboard.current != null)
-            {
-                if (UnityEngine.InputSystem.Keyboard.current.bKey.wasPressedThisFrame)
-                {
-                    StartSimulation();
-                }
-
-                if (UnityEngine.InputSystem.Keyboard.current.nKey.wasPressedThisFrame)
-                {
-                    SubmitGuess();
-                }
-            }
-#endif
-        }
-
-        // ---------------------------------------------------------------------------------------
-        // Public game-loop API. These are the integration hooks for a designer-authored UI/UX:
-        // call StartSimulation()/SubmitGuess() from buttons, and subscribe to the events to drive
-        // custom pop-ups. The placeholder in-world button + head-locked messages below are wired
-        // through these same entry points and can be removed once a real UI is ported in.
-        // ---------------------------------------------------------------------------------------
-
-        public enum SimulationPhase { Waiting, Playing, Resolved }
-
-        public enum GuessOutcome { NoTarget, Incorrect, Correct }
-
-        /// <summary>Fires when a fresh round has been randomized and is ready to play.</summary>
-        public event Action OnSimulationStarted;
-
-        /// <summary>Fires after every submitted guess: (outcome, triesUsed, maxTries).</summary>
-        public event Action<GuessOutcome, int, int> OnGuessResolved;
-
-        public SimulationPhase Phase => m_phase;
-
-        public int TriesUsed => m_triesUsed;
-
-        public int MaxTries => Mathf.Max(1, m_maxTries);
-
-        public int TriesRemaining => Mathf.Max(0, MaxTries - m_triesUsed);
-
-        public bool IsRoundActive => m_phase == SimulationPhase.Playing;
-
-        /// <summary>Randomize a new round and begin play. Safe to call from any phase.</summary>
-        public void StartSimulation()
-        {
-            GenerateRun();
-            m_triesUsed = 0;
-            m_phase = SimulationPhase.Playing;
-            RefreshStartButtonVisual();
-            SetStatus("Round started — find the hidden radioactive material.");
-            ShowMessage("Find the radioactive\nmaterial", new Color(0.7f, 0.95f, 1f), 3f);
-            OnSimulationStarted?.Invoke();
-        }
-
-        /// <summary>
-        /// Submit the barrel the detector is currently pointed at as the player's answer.
-        /// Returns the outcome and (placeholder) shows a red/green result message.
-        /// </summary>
-        public GuessOutcome SubmitGuess()
-        {
-            if (m_phase != SimulationPhase.Playing)
-            {
-                return GuessOutcome.NoTarget;
-            }
-
-            var target = GetAimedBarrel();
-            if (target == null)
-            {
-                ShowMessage("Point the detector at a\nbarrel, then press submit",
-                    new Color(1f, 0.86f, 0.2f), 2.5f);
-                return GuessOutcome.NoTarget;
-            }
-
-            var correct = m_hotSource != null && target.gameObject == m_hotSource.gameObject;
-            GuessOutcome outcome;
-            if (correct)
-            {
-                outcome = GuessOutcome.Correct;
-                m_phase = SimulationPhase.Resolved;
-                ShowMessage("You found the\nradioactive material", new Color(0.25f, 1f, 0.4f), 6f);
-                PulseHaptic(DetectorController(), 0.35f, 0.6f, 0.25f);
-                SetStatus("Correct! Press START for a new round.");
-            }
-            else
-            {
-                m_triesUsed++;
-                outcome = GuessOutcome.Incorrect;
-                if (m_triesUsed >= MaxTries)
-                {
-                    m_phase = SimulationPhase.Resolved;
-                    ShowMessage("That is incorrect\nOut of tries — press START", new Color(1f, 0.25f, 0.25f), 6f);
-                    SetStatus("Out of tries. Press START for a new round.");
-                }
-                else
-                {
-                    var left = TriesRemaining;
-                    ShowMessage($"That is incorrect\n{left} {(left == 1 ? "try" : "tries")} left",
-                        new Color(1f, 0.25f, 0.25f), 4f);
-                    SetStatus($"Incorrect — {left} {(left == 1 ? "try" : "tries")} remaining.");
-                }
-
-                PulseHaptic(DetectorController(), 0.5f, 0.5f, 0.12f);
-            }
-
-            RefreshStartButtonVisual();
-            OnGuessResolved?.Invoke(outcome, m_triesUsed, MaxTries);
-            return outcome;
-        }
-
-        /// <summary>
-        /// The barrel the detector (or, if not held, the right controller) is aimed at. Uses a
-        /// forgiving angular cone rather than a pin-thin ray: the closest-to-centre barrel within
-        /// m_guessConeAngle and m_guessRayLength is the pick, so the player only has to point
-        /// roughly at a drum. Falls back to a direct raycast hit so a dead-on point always counts.
-        /// </summary>
-        public BarrelInstance GetAimedBarrel()
-        {
-            if (!TryGetAimRay(out var origin, out var direction))
-            {
-                return null;
-            }
-
-            BarrelInstance best = null;
-            var bestAngle = Mathf.Max(2f, m_guessConeAngle);
-            var maxDistance = Mathf.Max(0.5f, m_guessRayLength);
-
-            foreach (var barrel in m_spawnedBarrels)
-            {
-                if (barrel == null)
-                {
-                    continue;
-                }
-
-                var collider = barrel.GetComponentInChildren<Collider>();
-                var center = collider != null ? collider.bounds.center : barrel.transform.position;
-                var toBarrel = center - origin;
-                var distance = toBarrel.magnitude;
-                if (distance < 1e-3f || distance > maxDistance)
-                {
-                    continue;
-                }
-
-                var angle = Vector3.Angle(direction, toBarrel);
-                if (angle < bestAngle)
-                {
-                    bestAngle = angle;
-                    best = barrel;
-                }
-            }
-
-            // Dead-on physics hit wins even if it is just outside the cone math (e.g. a very close,
-            // wide drum), so pointing straight at a barrel is never rejected.
-            if (best == null && Physics.Raycast(origin, direction, out var hit, maxDistance, ~0, QueryTriggerInteraction.Ignore))
-            {
-                best = hit.collider.GetComponentInParent<BarrelInstance>();
-            }
-
-            return best;
-        }
-
-        private bool TryGetAimRay(out Vector3 origin, out Vector3 direction)
-        {
-            if (m_detectorGrabTool != null && m_detectorGrabTool.IsHeld && m_detectorSensorTip != null && m_detectorRoot != null)
-            {
-                origin = m_detectorSensorTip.position;
-                direction = m_detectorRoot.transform.up;
-                return true;
-            }
-
-            if (m_cameraRig != null && m_cameraRig.rightControllerAnchor != null)
-            {
-                origin = m_cameraRig.rightControllerAnchor.position;
-                direction = m_cameraRig.rightControllerAnchor.forward;
-                return true;
-            }
-
-            if (m_cameraTransform != null)
-            {
-                origin = m_cameraTransform.position;
-                direction = m_cameraTransform.forward;
-                return true;
-            }
-
-            origin = Vector3.zero;
-            direction = Vector3.forward;
-            return false;
-        }
-
-        private OVRInput.Controller DetectorController()
-        {
-            return m_detectorGrabTool != null && m_detectorGrabTool.IsHeld
-                ? m_detectorGrabTool.HeldController
-                : OVRInput.Controller.RTouch;
         }
 
         public void GenerateRun()
@@ -654,18 +318,14 @@ namespace SimJam.BarrelSimulator
                 bestResult = SpawnBarrelsForCurrentLayout(requestedCount);
             }
 
-            AssignHotSource();
-
             var finalCount = foundFullScenario ? requestedCount : bestResult.SpawnedCount;
             SetStatus(finalCount >= requestedCount
-                ? $"Randomized lab room: {finalCount} barrels. One hidden source assigned."
-                : $"Requested {requestedCount}; placed {finalCount} visible/walkable barrels. One hidden source assigned.");
+                ? $"Randomized office room: {finalCount} barrels."
+                : $"Requested {requestedCount}; placed {finalCount} visible/walkable barrels.");
         }
 
         public void ClearScenario()
         {
-            RemoveHotSource();
-
             foreach (var spawnedObject in m_spawnedObjects)
             {
                 if (spawnedObject != null)
@@ -681,8 +341,6 @@ namespace SimJam.BarrelSimulator
             m_spawnSlots.Clear();
             m_placedBarrels.Clear();
             m_navigationObstacles.Clear();
-            m_barrelObstacles.Clear();
-            RestorePersistentObstacles();
 
             if (m_scenarioRoot != null)
             {
@@ -710,41 +368,7 @@ namespace SimJam.BarrelSimulator
                 }
             }
 
-            SetStatus("Re-rolled radiation values and the hidden source.");
-        }
-
-        private void AssignHotSource()
-        {
-            RemoveHotSource();
-            if (m_spawnedBarrels.Count == 0)
-            {
-                return;
-            }
-
-            var index = UnityEngine.Random.Range(0, m_spawnedBarrels.Count);
-            var barrel = m_spawnedBarrels[index];
-            if (barrel == null)
-            {
-                return;
-            }
-
-            var safeMin = Mathf.Max(1f, Mathf.Min(m_minSourceActivityCps, m_maxSourceActivityCps));
-            var safeMax = Mathf.Max(safeMin, Mathf.Max(m_minSourceActivityCps, m_maxSourceActivityCps));
-            var activity = Mathf.Pow(10f, UnityEngine.Random.Range(Mathf.Log10(safeMin), Mathf.Log10(safeMax)));
-            var isotope = s_isotopeNames[UnityEngine.Random.Range(0, s_isotopeNames.Length)];
-
-            m_hotSource = barrel.gameObject.AddComponent<RadiationSource>();
-            m_hotSource.Configure(activity, isotope);
-        }
-
-        private void RemoveHotSource()
-        {
-            if (m_hotSource != null)
-            {
-                Destroy(m_hotSource);
-            }
-
-            m_hotSource = null;
+            SetStatus("Randomized barrel counts.");
         }
 
         private Transform EnsureCameraRig()
@@ -758,7 +382,6 @@ namespace SimJam.BarrelSimulator
                     m_locomotionRoot = existingRig.transform;
                     ConfigureRig(existingRig);
                     MoveRigTo(PlayerStartPosition);
-                    EnsureAudioListener();
                     return existingRig.centerEyeAnchor;
                 }
 
@@ -784,7 +407,6 @@ namespace SimJam.BarrelSimulator
                 m_cameraRig = rigObject.AddComponent<OVRCameraRig>();
                 m_cameraRig.EnsureGameObjectIntegrity();
                 ConfigureRig(m_cameraRig);
-                EnsureAudioListener();
                 return m_cameraRig.centerEyeAnchor;
             }
 
@@ -803,23 +425,6 @@ namespace SimJam.BarrelSimulator
             camera.farClipPlane = 100f;
             m_locomotionRoot = camera.transform;
             return camera.transform;
-        }
-
-        private void EnsureAudioListener()
-        {
-            // The scene's Main Camera owns the only AudioListener and gets deactivated when the
-            // OVR rig spawns; OVRCameraRig never adds one, so geiger audio would be silent on device.
-            var existing = FindAnyObjectByType<AudioListener>();
-            if (existing != null && existing.isActiveAndEnabled)
-            {
-                return;
-            }
-
-            if (m_cameraRig != null && m_cameraRig.centerEyeAnchor != null
-                && m_cameraRig.centerEyeAnchor.GetComponent<AudioListener>() == null)
-            {
-                m_cameraRig.centerEyeAnchor.gameObject.AddComponent<AudioListener>();
-            }
         }
 
         private static void ConfigureRig(OVRCameraRig rig)
@@ -846,34 +451,8 @@ namespace SimJam.BarrelSimulator
             centerCamera.allowHDR = false;
         }
 
-        private void ConfigureAmbientLighting()
-        {
-            RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.62f, 0.67f, 0.72f);
-            RenderSettings.ambientEquatorColor = new Color(0.42f, 0.43f, 0.45f);
-            RenderSettings.ambientGroundColor = new Color(0.23f, 0.22f, 0.21f);
-
-            // Realtime sun shadows add Quest cost and only darken an enclosed interior.
-            foreach (var sceneLight in FindObjectsByType<Light>(FindObjectsSortMode.None))
-            {
-                if (sceneLight.type == LightType.Directional)
-                {
-                    sceneLight.shadows = LightShadows.None;
-                }
-            }
-        }
-
-        private bool UseCustomArms => m_customArmsPrefab != null;
-
         private void EnsureControllerHandVisuals()
         {
-            // Custom arms replace the Meta hands entirely.
-            if (UseCustomArms)
-            {
-                SetControllerHandVisualActive(false);
-                return;
-            }
-
             if (!m_showControllerHands || m_cameraRig == null)
             {
                 SetControllerHandVisualActive(false);
@@ -881,7 +460,6 @@ namespace SimJam.BarrelSimulator
             }
 
             m_cameraRig.EnsureGameObjectIntegrity();
-            MetaQuestHandVisuals.OverrideHandMaterial = m_metaHandMaterial;
             if (MetaQuestHandVisuals.TryEnsure(m_cameraRig, ref m_leftHandVisual, ref m_rightHandVisual, m_controllerHandScale))
             {
                 SetControllerHandVisualActive(true);
@@ -899,245 +477,6 @@ namespace SimJam.BarrelSimulator
             }
 
             SetControllerHandVisualActive(true);
-        }
-
-        private void EnsureArmRig()
-        {
-            // Custom arms supply their own (skinned) arms; skip the procedural capsule arms.
-            if (UseCustomArms || !m_showArms || m_armRig != null || m_cameraRig == null)
-            {
-                return;
-            }
-
-            var armObject = new GameObject("Procedural Arm Rig");
-            armObject.transform.SetParent(transform, false);
-            m_armRig = armObject.AddComponent<ProceduralArmRig>();
-            var sleeveMaterial = CreateMaterial(new Color(0.78f, 0.80f, 0.82f), "Lab Coat Sleeve", 0f, 0.3f, null, null);
-            var skinMaterial = CreateMaterial(new Color(0.82f, 0.72f, 0.62f), "Controller Hand Skin");
-            m_armRig.Initialize(m_cameraRig, sleeveMaterial, skinMaterial);
-        }
-
-        // Instantiates the assigned Mixamo arms FBX once and drives it via MixamoArmRig. Built like
-        // the detector/pedestal: once, outside the scenario root, so A/Start regen never destroys it.
-        private void EnsureCustomArms()
-        {
-            if (!UseCustomArms || m_customArmsInstance != null || m_cameraRig == null)
-            {
-                return;
-            }
-
-            m_customArmsInstance = Instantiate(m_customArmsPrefab, transform);
-            m_customArmsInstance.name = "Custom Arms";
-
-            // The Mixamo FBX imports without its textures, so give every skinned mesh a skin material
-            // (a solid Standard material never renders magenta on the Built-in pipeline), and stop it
-            // from being frustum-culled once IK moves the bones outside the baked bounds.
-            var skin = CreateMaterial(new Color(0.80f, 0.66f, 0.55f), "Custom Arm Skin", 0f, 0.25f, null, null);
-            foreach (var smr in m_customArmsInstance.GetComponentsInChildren<SkinnedMeshRenderer>(true))
-            {
-                smr.updateWhenOffscreen = true;
-                var existing = smr.sharedMaterials;
-                if (existing.Length == 0 || existing[0] == null || existing[0].mainTexture == null)
-                {
-                    var mats = new Material[Mathf.Max(1, existing.Length)];
-                    for (var i = 0; i < mats.Length; i++)
-                    {
-                        mats[i] = skin;
-                    }
-
-                    smr.sharedMaterials = mats;
-                }
-            }
-
-            m_customArmRig = m_customArmsInstance.AddComponent<MixamoArmRig>();
-            m_customArmRig.ChestOffsetFromHead = m_customArmsChestOffset;
-            m_customArmRig.BodyYawOffsetDegrees = m_customArmsBodyYawOffset;
-            m_customArmRig.MatchHandToController = m_customArmsMatchHandToController;
-            m_customArmRig.HandEulerOffsetLeft = m_customArmsHandEulerOffset;
-            m_customArmRig.HandEulerOffsetRight = m_customArmsHandEulerOffset;
-            m_customArmRig.Initialize(m_cameraRig, m_customArmsInstance);
-        }
-
-        private void EnsureDetector()
-        {
-            if (m_detectorRoot != null)
-            {
-                return;
-            }
-
-            var pedestalPosition = SpawnRoomCenter + m_pedestalOffsetFromSpawnCenter;
-            var pedestalParent = m_roomRoot != null ? m_roomRoot : transform;
-            RoomDecorator.BuildDetectorPedestal(pedestalParent, pedestalPosition, DecorMaterialFactory);
-
-            m_pedestalFootprint = new ObstacleRect
-            {
-                Center = new Vector2(pedestalPosition.x, pedestalPosition.z),
-                HalfExtents = new Vector2(0.31f, 0.31f),
-                YawDegrees = 0f
-            };
-            m_hasPedestal = true;
-            RestorePersistentObstacles();
-
-            // Detector collider bottom sits 0.115 below its root; rest it just above the cap.
-            m_detectorHomePosition = pedestalPosition + new Vector3(0f, RoomDecorator.PedestalTopHeight + 0.117f, 0f);
-            m_detectorHomeRotation = Quaternion.identity;
-
-            var parts = DetectorModelBuilder.Build();
-            m_detectorRoot = parts.Root;
-            m_detectorSensorTip = parts.SensorTip;
-            m_detectorRoot.transform.SetPositionAndRotation(m_detectorHomePosition, m_detectorHomeRotation);
-
-            m_detectorGrabTool = m_detectorRoot.AddComponent<GrabbableTool>();
-            m_detectorGrabTool.Initialize(m_cameraRig, m_detectorGrabRadius);
-
-            var geigerAudio = m_detectorRoot.AddComponent<GeigerAudio>();
-            var detector = m_detectorRoot.AddComponent<RadiationDetector>();
-            detector.Initialize(m_cameraRig, parts.ScreenText, parts.SensorTip, geigerAudio, m_detectorGrabTool,
-                m_detectorHomePosition, m_detectorHomeRotation);
-        }
-
-        private void RestorePersistentObstacles()
-        {
-            if (m_hasPedestal)
-            {
-                m_navigationObstacles.Add(m_pedestalFootprint);
-            }
-        }
-
-        // Builds the physical START button on the waiting-room side of the shared wall, beside the
-        // doorway. Poking it (proximity to either controller) calls StartSimulation(). Built once
-        // in Start(); it survives ClearScenario/GenerateRun like the detector and pedestal.
-        private void EnsureStartButton()
-        {
-            if (m_startButtonRoot != null)
-            {
-                return;
-            }
-
-            var sharedWallZ = -RoomSizeMeters.y * 0.5f - m_wallThickness * 0.5f;
-            var wallSurfaceZ = sharedWallZ - m_wallThickness * 0.5f; // spawn-room face of the shared wall
-            var spawnHalfWidth = SpawnRoomSizeMeters.x * 0.5f - 0.3f;
-            var buttonX = Mathf.Min(m_doorwayWidth * 0.5f + 0.55f, Mathf.Max(0.6f, spawnHalfWidth));
-            const float buttonY = 1.3f;
-
-            var root = new GameObject("Start Button");
-            var parent = m_roomRoot != null ? m_roomRoot : transform;
-            root.transform.SetParent(parent, false);
-            root.transform.localPosition = new Vector3(buttonX, buttonY, wallSurfaceZ);
-            root.transform.localRotation = Quaternion.identity;
-            m_startButtonRoot = root;
-
-            // Dark housing plate flush against the wall (+z is into the wall, away from the player).
-            var housingMaterial = CreateMaterial(new Color(0.12f, 0.13f, 0.15f), "Start Button Housing", 0.35f, 0.4f, null, null);
-            var housing = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            housing.name = "Start Button Housing";
-            housing.transform.SetParent(root.transform, false);
-            housing.transform.localPosition = new Vector3(0f, 0f, 0.018f);
-            housing.transform.localScale = new Vector3(0.34f, 0.34f, 0.03f);
-            AssignMaterial(housing, housingMaterial);
-            DisableCollider(housing);
-
-            // Bright emissive cap the player pokes. It is recolored per phase, so it owns a unique
-            // material instance (CreateMaterial caches/shares by params and must not be recolored).
-            var emissiveBase = Resources.Load<Material>("SimJamEmissiveScreen");
-            m_startButtonMaterial = emissiveBase != null ? new Material(emissiveBase) : new Material(Shader.Find("Standard"));
-            if (emissiveBase == null)
-            {
-                m_startButtonMaterial.EnableKeyword("_EMISSION");
-            }
-            m_startButtonMaterial.name = "Start Button Cap";
-            m_runtimeMaterials.Add(m_startButtonMaterial);
-
-            var cap = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            cap.name = "Start Button Cap";
-            cap.transform.SetParent(root.transform, false);
-            m_startButtonCapRestPosition = new Vector3(0f, 0f, -0.045f); // protrudes toward the player (-z)
-            cap.transform.localPosition = m_startButtonCapRestPosition;
-            cap.transform.localScale = new Vector3(0.22f, 0.22f, 0.06f);
-            cap.GetComponent<Renderer>().sharedMaterial = m_startButtonMaterial;
-            DisableCollider(cap);
-            m_startButtonCap = cap.transform;
-
-            // "START" label on the player-facing (-z) side of the cap. Identity rotation matches the
-            // head-locked hint convention: a viewer looking along +z reads the text correctly.
-            var labelObject = new GameObject("Start Button Label");
-            labelObject.transform.SetParent(root.transform, false);
-            labelObject.transform.localPosition = new Vector3(0f, 0f, -0.081f);
-            labelObject.transform.localRotation = Quaternion.identity;
-            var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            m_startButtonLabel = labelObject.AddComponent<TextMesh>();
-            m_startButtonLabel.font = font;
-            labelObject.GetComponent<MeshRenderer>().sharedMaterial = font.material;
-            m_startButtonLabel.anchor = TextAnchor.MiddleCenter;
-            m_startButtonLabel.alignment = TextAlignment.Center;
-            m_startButtonLabel.characterSize = 0.012f;
-            m_startButtonLabel.fontSize = 96;
-            m_startButtonLabel.color = Color.white;
-            m_startButtonLabel.text = "START";
-
-            RefreshStartButtonVisual();
-        }
-
-        private void UpdateStartButton()
-        {
-            if (m_startButtonRoot == null || m_startButtonCap == null)
-            {
-                return;
-            }
-
-            var rightNear = m_cameraRig != null && IsControllerNearStartButton(m_cameraRig.rightControllerAnchor);
-            var leftNear = m_cameraRig != null && IsControllerNearStartButton(m_cameraRig.leftControllerAnchor);
-            var pressed = rightNear || leftNear;
-
-            // Animate the cap: pushed in toward the wall (+z) while a hand rests on it.
-            var target = pressed ? m_startButtonCapRestPosition + new Vector3(0f, 0f, 0.022f) : m_startButtonCapRestPosition;
-            m_startButtonCap.localPosition = Vector3.MoveTowards(m_startButtonCap.localPosition, target, 0.5f * Time.deltaTime);
-
-            if (!pressed)
-            {
-                m_startButtonArmed = true;
-                return;
-            }
-
-            // Fire once per touch; locked mid-round so the player can't reshuffle what is shuffled.
-            if (m_startButtonArmed && m_phase != SimulationPhase.Playing)
-            {
-                m_startButtonArmed = false;
-                PulseHaptic(rightNear ? OVRInput.Controller.RTouch : OVRInput.Controller.LTouch, 0.5f, 0.5f, 0.08f);
-                StartSimulation();
-            }
-        }
-
-        private bool IsControllerNearStartButton(Transform anchor)
-        {
-            return anchor != null && m_startButtonCap != null
-                && Vector3.Distance(anchor.position, m_startButtonCap.position) <= Mathf.Max(0.04f, m_startButtonPressRadius);
-        }
-
-        private void RefreshStartButtonVisual()
-        {
-            var playing = m_phase == SimulationPhase.Playing;
-
-            if (m_startButtonMaterial != null)
-            {
-                if (playing)
-                {
-                    var amber = new Color(0.85f, 0.5f, 0.1f);
-                    m_startButtonMaterial.color = amber;
-                    m_startButtonMaterial.SetColor("_EmissionColor", amber * 0.6f);
-                }
-                else
-                {
-                    m_startButtonMaterial.color = new Color(0.15f, 0.8f, 0.25f);
-                    m_startButtonMaterial.SetColor("_EmissionColor", new Color(0.2f, 1f, 0.35f) * 0.9f);
-                }
-            }
-
-            if (m_startButtonLabel != null)
-            {
-                m_startButtonLabel.text = playing ? "IN\nROUND" : "START";
-                m_startButtonLabel.color = playing ? new Color(1f, 0.85f, 0.6f) : Color.white;
-            }
         }
 
         private void SetControllerHandVisualActive(bool isActive)
@@ -1198,24 +537,22 @@ namespace SimJam.BarrelSimulator
                 Destroy(m_roomRoot.gameObject);
             }
 
-            var roomObject = new GameObject("Generated Radiation Lab Room");
+            var roomObject = new GameObject("Generated 20ft Office Room");
             roomObject.transform.SetParent(transform, false);
             m_roomRoot = roomObject.transform;
 
-            var floorMaterial = CreateMaterial(new Color(0.78f, 0.79f, 0.78f), "Lab Concrete Floor", 0f, 0.32f, ProceduralTextureLibrary.Concrete512, null);
-            floorMaterial.mainTextureScale = new Vector2(4f, 4f);
-            var wallMaterial = CreateMaterial(new Color(0.92f, 0.93f, 0.92f), "Painted Lab Wall", 0f, 0.18f, ProceduralTextureLibrary.PaintedWall256, null);
-            wallMaterial.mainTextureScale = new Vector2(3f, 1.5f);
-            var ceilingMaterial = CreateMaterial(new Color(0.86f, 0.88f, 0.87f), "Ceiling Tile", 0f, 0.1f, ProceduralTextureLibrary.CeilingTile256, null);
-            ceilingMaterial.mainTextureScale = new Vector2(6f, 6f);
-            var gridMaterial = CreateMaterial(new Color(0.58f, 0.6f, 0.62f), "Ceiling Grid", 0.4f, 0.35f, null, null);
-            var lightPanelMaterial = CreateMaterial(new Color(0.85f, 0.98f, 1f), "Fluorescent Panel", 0f, 0.5f, null, new Color(0.75f, 0.95f, 1f) * 1.6f);
-            var homeFloorMaterial = CreateMaterial(new Color(0.72f, 0.6f, 0.47f), "Warm Home Floor", 0f, 0.4f, ProceduralTextureLibrary.WoodGrain256, null);
-            homeFloorMaterial.mainTextureScale = new Vector2(3f, 3f);
-            var homeWallMaterial = CreateMaterial(new Color(0.96f, 0.94f, 0.89f), "Warm Home Wall", 0f, 0.18f, ProceduralTextureLibrary.PaintedWall256, null);
-            var brownDoorMaterial = CreateMaterial(new Color(0.42f, 0.26f, 0.12f), "Brown Door Face", 0f, 0.4f, ProceduralTextureLibrary.WoodGrain256, null);
-            var whiteDoorMaterial = CreateMaterial(new Color(0.96f, 0.95f, 0.9f), "White Door Face", 0f, 0.45f, null, null);
-            var goldMaterial = CreateMaterial(new Color(1f, 0.68f, 0.16f), "Gold Door Knob", 0.85f, 0.75f, null, null);
+            var floorMaterial = CreateMaterial(new Color(0.93f, 0.94f, 0.92f), "Office Floor");
+            var wallMaterial = CreateMaterial(Color.white, "White Wall");
+            var ceilingMaterial = CreateMaterial(new Color(0.86f, 0.88f, 0.87f), "Ceiling Tile");
+            var gridMaterial = CreateMaterial(new Color(0.58f, 0.6f, 0.62f), "Ceiling Grid");
+            var lightPanelMaterial = CreateMaterial(new Color(0.85f, 0.98f, 1f), "Fluorescent Panel");
+            var homeFloorMaterial = CreateMaterial(new Color(0.64f, 0.53f, 0.42f), "Warm Home Floor");
+            var homeWallMaterial = CreateMaterial(new Color(0.96f, 0.94f, 0.89f), "Warm Home Wall");
+            var brownDoorMaterial = CreateMaterial(new Color(0.36f, 0.19f, 0.08f), "Brown Door Face");
+            var whiteDoorMaterial = CreateMaterial(new Color(0.96f, 0.95f, 0.9f), "White Door Face");
+            var goldMaterial = CreateMaterial(new Color(1f, 0.68f, 0.16f), "Gold Door Knob");
+            lightPanelMaterial.EnableKeyword("_EMISSION");
+            lightPanelMaterial.SetColor("_EmissionColor", new Color(0.75f, 0.95f, 1f) * 1.4f);
 
             var size = RoomSizeMeters;
             var halfWidth = size.x * 0.5f;
@@ -1234,27 +571,6 @@ namespace SimJam.BarrelSimulator
             BuildSpawnRoomGeometry(homeFloorMaterial, homeWallMaterial, ceilingMaterial, gridMaterial, lightPanelMaterial);
             BuildConnectingDoor(sharedWallZ, brownDoorMaterial, whiteDoorMaterial, goldMaterial);
             BuildHomeRoomProps();
-
-            AttachRoomOccluders();
-            RoomDecorator.DecorateOfficeRoom(m_roomRoot, size, m_wallHeight, m_doorwayWidth, m_doorwayHeight, sharedWallZ, DecorMaterialFactory);
-            RoomDecorator.DecorateSpawnRoom(m_roomRoot, SpawnRoomCenter, SpawnRoomSizeMeters, m_wallHeight, sharedWallZ, DecorMaterialFactory);
-        }
-
-        private void AttachRoomOccluders()
-        {
-            // Every solid room cube (walls, floor, ceiling) shields radiation strongly.
-            foreach (var collider in m_roomRoot.GetComponentsInChildren<Collider>())
-            {
-                if (collider.enabled && collider.GetComponentInParent<RadiationOccluder>() == null)
-                {
-                    RadiationOccluder.Attach(collider.gameObject, 0.2f);
-                }
-            }
-        }
-
-        private Material DecorMaterialFactory(Color color, string materialName, float metallic, float smoothness, Texture2D albedo, Color? emission)
-        {
-            return CreateMaterial(color, materialName, metallic, smoothness, albedo, emission);
         }
 
         private void CreateDoorwayWallSegments(string prefix, float wallCenterZ, float wallWidth, Material wallMaterial)
@@ -1306,7 +622,6 @@ namespace SimJam.BarrelSimulator
 
         private void BuildFluorescentPanels(Vector3 center, Material lightPanelMaterial)
         {
-            var frameMaterial = CreateMaterial(new Color(0.4f, 0.42f, 0.44f), "Light Panel Frame", 0.3f, 0.3f, null, null);
             var panelPositions = new[]
             {
                 center + new Vector3(-1.4f, m_wallHeight + 0.075f, -1.25f),
@@ -1318,7 +633,6 @@ namespace SimJam.BarrelSimulator
             foreach (var panelPosition in panelPositions)
             {
                 CreateRoomCube("Fluorescent Light Panel", panelPosition, new Vector3(0.95f, 0.018f, 0.28f), lightPanelMaterial);
-                CreateRoomCube("Fluorescent Light Frame", panelPosition + Vector3.up * 0.012f, new Vector3(1.02f, 0.014f, 0.34f), frameMaterial);
 
                 var lightObject = new GameObject("Fluorescent Point Light");
                 lightObject.transform.SetParent(m_roomRoot, false);
@@ -1329,7 +643,6 @@ namespace SimJam.BarrelSimulator
                 light.intensity = 1.25f;
                 light.range = 4.5f;
                 light.shadows = LightShadows.None;
-                light.renderMode = LightRenderMode.ForceVertex;
             }
         }
 
@@ -1354,7 +667,6 @@ namespace SimJam.BarrelSimulator
                 light.intensity = 1.1f;
                 light.range = 3.7f;
                 light.shadows = LightShadows.None;
-                light.renderMode = LightRenderMode.ForceVertex;
             }
         }
 
@@ -1371,9 +683,9 @@ namespace SimJam.BarrelSimulator
             pivotObject.transform.localRotation = Quaternion.identity;
             m_doorPivot = pivotObject.transform;
             m_doorCurrentAngle = 0f;
+            m_isDoorOpen = false;
 
-            var doorCore = CreateChildCube(m_doorPivot, "Door Brown Core", new Vector3(doorWidth * 0.5f, doorHeight * 0.5f, 0f), new Vector3(doorWidth, doorHeight, doorThickness), brownDoorMaterial, true);
-            RadiationOccluder.Attach(doorCore, 0.45f);
+            CreateChildCube(m_doorPivot, "Door Brown Core", new Vector3(doorWidth * 0.5f, doorHeight * 0.5f, 0f), new Vector3(doorWidth, doorHeight, doorThickness), brownDoorMaterial, true);
             CreateChildCube(m_doorPivot, "Door Lab Brown Face", new Vector3(doorWidth * 0.5f, doorHeight * 0.5f, doorThickness * 0.5f + 0.003f), new Vector3(doorWidth * 0.96f, doorHeight * 0.96f, 0.006f), brownDoorMaterial, false);
             CreateChildCube(m_doorPivot, "Door Spawn White Face", new Vector3(doorWidth * 0.5f, doorHeight * 0.5f, -doorThickness * 0.5f - 0.003f), new Vector3(doorWidth * 0.96f, doorHeight * 0.96f, 0.006f), whiteDoorMaterial, false);
 
@@ -1407,12 +719,12 @@ namespace SimJam.BarrelSimulator
             var center = SpawnRoomCenter;
             var size = SpawnRoomSizeMeters;
             var halfDepth = size.y * 0.5f;
-            var warmWood = CreateMaterial(new Color(0.5f, 0.33f, 0.17f), "Warm Wood", 0f, 0.42f, ProceduralTextureLibrary.WoodGrain256, null);
-            var couchMaterial = CreateMaterial(new Color(0.43f, 0.49f, 0.55f), "Soft Couch Fabric", 0f, 0.08f, null, null);
-            var rugMaterial = CreateMaterial(new Color(0.58f, 0.18f, 0.14f), "Home Area Rug", 0f, 0.05f, null, null);
-            var plantPotMaterial = CreateMaterial(new Color(0.38f, 0.22f, 0.12f), "Plant Pot", 0f, 0.3f, null, null);
-            var plantLeafMaterial = CreateMaterial(new Color(0.12f, 0.42f, 0.2f), "Plant Leaves", 0f, 0.25f, null, null);
-            var lampShadeMaterial = CreateMaterial(new Color(0.96f, 0.86f, 0.62f), "Warm Lamp Shade", 0f, 0.3f, null, null);
+            var warmWood = CreateMaterial(new Color(0.45f, 0.28f, 0.14f), "Warm Wood");
+            var couchMaterial = CreateMaterial(new Color(0.43f, 0.49f, 0.55f), "Soft Couch Fabric");
+            var rugMaterial = CreateMaterial(new Color(0.58f, 0.18f, 0.14f), "Home Area Rug");
+            var plantPotMaterial = CreateMaterial(new Color(0.38f, 0.22f, 0.12f), "Plant Pot");
+            var plantLeafMaterial = CreateMaterial(new Color(0.12f, 0.42f, 0.2f), "Plant Leaves");
+            var lampShadeMaterial = CreateMaterial(new Color(0.96f, 0.86f, 0.62f), "Warm Lamp Shade");
 
             CreateRoomCube("Home Area Rug", center + new Vector3(0f, 0.014f, -0.2f), new Vector3(1.9f, 0.026f, 1.25f), rugMaterial);
 
@@ -1421,24 +733,20 @@ namespace SimJam.BarrelSimulator
             CreateRoomCube("Home Couch Back", new Vector3(center.x, 0.58f, couchZ - 0.23f), new Vector3(1.65f, 0.72f, 0.16f), couchMaterial);
             CreateRoomCube("Home Couch Left Arm", new Vector3(center.x - 0.88f, 0.36f, couchZ), new Vector3(0.18f, 0.48f, 0.56f), couchMaterial);
             CreateRoomCube("Home Couch Right Arm", new Vector3(center.x + 0.88f, 0.36f, couchZ), new Vector3(0.18f, 0.48f, 0.56f), couchMaterial);
-            RoomDecorator.AddBlobShadow(m_roomRoot, new Vector3(center.x, 0f, couchZ - 0.1f), 1.05f);
 
             CreateRoomCube("Home Coffee Table", center + new Vector3(0f, 0.22f, 0.15f), new Vector3(1.0f, 0.12f, 0.48f), warmWood);
             CreateRoomCube("Home Coffee Table Base", center + new Vector3(0f, 0.1f, 0.15f), new Vector3(0.16f, 0.2f, 0.16f), warmWood);
-            RoomDecorator.AddBlobShadow(m_roomRoot, center + new Vector3(0f, 0f, 0.15f), 0.6f);
 
             CreateRoomCube("Home Side Table", center + new Vector3(-1.35f, 0.34f, -0.75f), new Vector3(0.46f, 0.12f, 0.46f), warmWood);
             CreateRoomCube("Home Side Table Base", center + new Vector3(-1.35f, 0.17f, -0.75f), new Vector3(0.14f, 0.34f, 0.14f), warmWood);
-            RoomDecorator.AddBlobShadow(m_roomRoot, center + new Vector3(-1.35f, 0f, -0.75f), 0.32f);
             CreateLamp(center + new Vector3(-1.35f, 0.4f, -0.75f), lampShadeMaterial);
 
             CreatePlant(center + new Vector3(1.35f, 0f, -1.15f), plantPotMaterial, plantLeafMaterial);
-            RoomDecorator.AddBlobShadow(m_roomRoot, center + new Vector3(1.35f, 0f, -1.15f), 0.28f);
         }
 
         private void CreateLamp(Vector3 basePosition, Material shadeMaterial)
         {
-            var stemMaterial = CreateMaterial(new Color(0.82f, 0.62f, 0.3f), "Lamp Stem", 0.7f, 0.6f, null, null);
+            var stemMaterial = CreateMaterial(new Color(0.82f, 0.62f, 0.3f), "Lamp Stem");
             var baseDisk = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             baseDisk.name = "Home Table Lamp Base";
             baseDisk.transform.SetParent(m_roomRoot, false);
@@ -1472,7 +780,6 @@ namespace SimJam.BarrelSimulator
             light.intensity = 0.65f;
             light.range = 2.2f;
             light.shadows = LightShadows.None;
-            light.renderMode = LightRenderMode.ForceVertex;
         }
 
         private void CreatePlant(Vector3 basePosition, Material potMaterial, Material leafMaterial)
@@ -1558,8 +865,6 @@ namespace SimJam.BarrelSimulator
             m_tables.Clear();
             m_shelves.Clear();
             m_navigationObstacles.Clear();
-            m_barrelObstacles.Clear();
-            RestorePersistentObstacles();
 
             var tableCount = UnityEngine.Random.Range(m_minTables, m_maxTables + 1);
             var shelfCount = UnityEngine.Random.Range(m_minShelfUnits, m_maxShelfUnits + 1);
@@ -1577,8 +882,8 @@ namespace SimJam.BarrelSimulator
 
         private void TryCreateRandomTable(int tableIndex)
         {
-            var tableMaterial = CreateMaterial(new Color(0.94f, 0.94f, 0.91f), "Plastic Folding Table", 0f, 0.45f, null, null);
-            var legMaterial = CreateMaterial(new Color(0.55f, 0.56f, 0.58f), "Table Metal Legs", 0.7f, 0.55f, null, null);
+            var tableMaterial = CreateMaterial(new Color(0.94f, 0.94f, 0.91f), "Plastic Folding Table");
+            var legMaterial = CreateMaterial(new Color(0.55f, 0.56f, 0.58f), "Table Metal Legs");
             var tableSize = new Vector2(UnityEngine.Random.Range(1.25f, 1.65f), UnityEngine.Random.Range(0.62f, 0.8f));
             const float tableHeight = 0.74f;
 
@@ -1602,7 +907,6 @@ namespace SimJam.BarrelSimulator
                 tableRoot.transform.SetParent(m_scenarioRoot, false);
                 tableRoot.transform.SetPositionAndRotation(position, Quaternion.Euler(0f, yaw, 0f));
                 m_spawnedObjects.Add(tableRoot);
-                RadiationOccluder.Attach(tableRoot, 0.75f);
 
                 CreatePropCube(tableRoot.transform, "Table Top", new Vector3(0f, tableHeight, 0f), new Vector3(tableSize.x, 0.07f, tableSize.y), tableMaterial);
                 var legX = tableSize.x * 0.42f;
@@ -1611,7 +915,6 @@ namespace SimJam.BarrelSimulator
                 CreatePropCube(tableRoot.transform, "Leg", new Vector3(legX, tableHeight * 0.5f, -legZ), new Vector3(0.045f, tableHeight, 0.045f), legMaterial);
                 CreatePropCube(tableRoot.transform, "Leg", new Vector3(-legX, tableHeight * 0.5f, legZ), new Vector3(0.045f, tableHeight, 0.045f), legMaterial);
                 CreatePropCube(tableRoot.transform, "Leg", new Vector3(legX, tableHeight * 0.5f, legZ), new Vector3(0.045f, tableHeight, 0.045f), legMaterial);
-                RoomDecorator.AddBlobShadow(tableRoot.transform, position, Mathf.Max(tableSize.x, tableSize.y) * 0.62f);
 
                 var forward = tableRoot.transform.forward;
                 m_tables.Add(new PropInfo
@@ -1632,93 +935,58 @@ namespace SimJam.BarrelSimulator
 
         private void TryCreateRandomShelf(int shelfIndex)
         {
-            var shelfMaterial = CreateMaterial(new Color(0.9f, 0.91f, 0.9f), "Wall Shelf", 0.1f, 0.35f, null, null);
-            var bracketMaterial = CreateMaterial(new Color(0.45f, 0.46f, 0.48f), "Shelf Bracket", 0.6f, 0.4f, null, null);
+            var shelfMaterial = CreateMaterial(new Color(0.9f, 0.91f, 0.9f), "Wall Shelf");
+            var bracketMaterial = CreateMaterial(new Color(0.45f, 0.46f, 0.48f), "Shelf Bracket");
             var size = RoomSizeMeters;
+            var wallOptions = new[] { WallSide.North, WallSide.East, WallSide.West };
+            var wall = wallOptions[UnityEngine.Random.Range(0, wallOptions.Length)];
+            var length = UnityEngine.Random.Range(1.05f, 2.05f);
+            var depth = UnityEngine.Random.Range(0.28f, 0.38f);
+            var tiers = UnityEngine.Random.Range(1, 4);
             var halfWidth = size.x * 0.5f;
             var halfDepth = size.y * 0.5f;
-            // The shelf back face is pinned to the root's local z=0 plane (both the procedural
-            // board and the asset path), so this inset is the exact air gap to the wall inner
-            // face. 5 mm reads as flush/wall-mounted without z-fighting.
-            const float wallMountInset = 0.005f;
-            var wallOptions = new[] { WallSide.North, WallSide.East, WallSide.West };
+            var sideOffset = UnityEngine.Random.Range(-1.65f, 1.65f);
+            const float wallMountInset = 0.012f;
 
-            var wall = WallSide.North;
-            var length = 0f;
-            var depth = 0f;
-            var tiers = 0;
-            var position = Vector3.zero;
-            var rotation = Quaternion.identity;
-            var inward = Vector3.forward;
-            var footprint = default(ObstacleRect);
-            var placed = false;
-
-            // Try several wall positions; reject any that overlaps an already-placed shelf. If no
-            // clear spot is found, place NONE (one shelf or none -- never overlapping boards).
-            for (var attempt = 0; attempt < 30; attempt++)
+            Vector3 position;
+            Quaternion rotation;
+            Vector3 inward;
+            switch (wall)
             {
-                wall = wallOptions[UnityEngine.Random.Range(0, wallOptions.Length)];
-                length = UnityEngine.Random.Range(1.05f, 2.05f);
-                // Deep enough that a 5 gal barrel (0.28 dia) sits centered on the board with side
-                // clearance instead of overhanging the front edge.
-                depth = UnityEngine.Random.Range(0.34f, 0.46f);
-                tiers = UnityEngine.Random.Range(1, 4);
-                var sideOffset = UnityEngine.Random.Range(-1.65f, 1.65f);
-
-                switch (wall)
-                {
-                    case WallSide.East:
-                        position = new Vector3(halfWidth - wallMountInset, 0f, sideOffset);
-                        rotation = Quaternion.Euler(0f, 90f, 0f);
-                        inward = Vector3.left;
-                        break;
-                    case WallSide.West:
-                        position = new Vector3(-halfWidth + wallMountInset, 0f, sideOffset);
-                        rotation = Quaternion.Euler(0f, -90f, 0f);
-                        inward = Vector3.right;
-                        break;
-                    default:
-                        position = new Vector3(sideOffset, 0f, halfDepth - wallMountInset);
-                        rotation = Quaternion.identity;
-                        inward = Vector3.back;
-                        break;
-                }
-
-                footprint = new ObstacleRect
-                {
-                    Center = new Vector2(position.x, position.z),
-                    HalfExtents = new Vector2(length * 0.5f, depth * 0.5f),
-                    YawDegrees = rotation.eulerAngles.y
-                };
-
-                if (!ShelfFootprintOverlaps(footprint))
-                {
-                    placed = true;
+                case WallSide.North:
+                    position = new Vector3(sideOffset, 0f, halfDepth - wallMountInset);
+                    rotation = Quaternion.identity;
+                    inward = Vector3.back;
                     break;
-                }
-            }
-
-            if (!placed)
-            {
-                return;
+                case WallSide.South:
+                    position = new Vector3(sideOffset, 0f, -halfDepth + wallMountInset);
+                    rotation = Quaternion.Euler(0f, 180f, 0f);
+                    inward = Vector3.forward;
+                    break;
+                case WallSide.East:
+                    position = new Vector3(halfWidth - wallMountInset, 0f, sideOffset);
+                    rotation = Quaternion.Euler(0f, 90f, 0f);
+                    inward = Vector3.left;
+                    break;
+                default:
+                    position = new Vector3(-halfWidth + wallMountInset, 0f, sideOffset);
+                    rotation = Quaternion.Euler(0f, -90f, 0f);
+                    inward = Vector3.right;
+                    break;
             }
 
             var shelfRoot = new GameObject($"Random Wall Shelf {shelfIndex + 1}");
             shelfRoot.transform.SetParent(m_scenarioRoot, false);
             shelfRoot.transform.SetPositionAndRotation(position, rotation);
             m_spawnedObjects.Add(shelfRoot);
-            RadiationOccluder.Attach(shelfRoot, 0.8f);
 
             var surfaceHeights = new List<float>(tiers);
             var shelfSlotSize = new Vector2(length, depth);
-            // Centre the barrel on the board (was 0.64 toward the front, which overhung the edge).
-            var shelfSlotCenter = new Vector3(0f, 0f, -depth * 0.5f);
+            var shelfSlotCenter = new Vector3(0f, 0f, -depth * 0.64f);
 
             for (var tier = 0; tier < tiers; tier++)
             {
-                // 0.58 m tier spacing leaves ~0.11-0.19 m of clear air above a 0.36 m-tall 5 gal
-                // barrel before the shelf above it (was 0.37 m, which left the barrel touching it).
-                var surfaceY = 1.05f + tier * 0.58f + UnityEngine.Random.Range(-0.02f, 0.02f);
+                var surfaceY = 1.05f + tier * 0.37f + UnityEngine.Random.Range(-0.04f, 0.04f);
                 if (TryCreateShelfAssetTier(shelfRoot.transform, tier, surfaceY, length, depth, out var shelfBounds))
                 {
                     shelfSlotSize = new Vector2(
@@ -1732,10 +1000,8 @@ namespace SimJam.BarrelSimulator
                 const float shelfThickness = 0.055f;
                 var boardCenterY = surfaceY - shelfThickness * 0.5f;
                 CreatePropCube(shelfRoot.transform, "Shelf Board", new Vector3(0f, boardCenterY, -depth * 0.5f), new Vector3(length, shelfThickness, depth), shelfMaterial);
-                // Brackets tucked near the wall (back of the board, local z ~ -depth*0.18) like a
-                // real wall-mounted shelf, instead of floating toward the room.
-                CreatePropCube(shelfRoot.transform, "Shelf Bracket", new Vector3(-length * 0.36f, surfaceY - 0.12f, -depth * 0.18f), new Vector3(0.035f, 0.22f, 0.035f), bracketMaterial);
-                CreatePropCube(shelfRoot.transform, "Shelf Bracket", new Vector3(length * 0.36f, surfaceY - 0.12f, -depth * 0.18f), new Vector3(0.035f, 0.22f, 0.035f), bracketMaterial);
+                CreatePropCube(shelfRoot.transform, "Shelf Bracket", new Vector3(-length * 0.36f, surfaceY - 0.12f, -depth * 0.38f), new Vector3(0.035f, 0.22f, 0.035f), bracketMaterial);
+                CreatePropCube(shelfRoot.transform, "Shelf Bracket", new Vector3(length * 0.36f, surfaceY - 0.12f, -depth * 0.38f), new Vector3(0.035f, 0.22f, 0.035f), bracketMaterial);
                 AddShelfSurfaceCollider(shelfRoot.transform, new Bounds(new Vector3(0f, boardCenterY, -depth * 0.5f), new Vector3(length, shelfThickness, depth)), tier);
                 surfaceHeights.Add(surfaceY + m_shelfSurfaceClearance);
             }
@@ -1759,55 +1025,6 @@ namespace SimJam.BarrelSimulator
                 Wall = wall,
                 Name = shelfRoot.name
             });
-
-            // Register the shelf as a floor-placement keep-out so tall floor barrels never spawn
-            // beneath the board/brackets and impale them. The stored PropInfo footprint is
-            // centered on the WALL mount; the board actually projects inward by `depth`, so shift
-            // the obstacle center inward by depth*0.5. Inflate by the same 0.12 margin tables use
-            // (the floor-slot test then adds its own barrel-radius padding).
-            var shelfObstacleCenter = new Vector2(position.x, position.z)
-                + new Vector2(inward.x, inward.z) * (depth * 0.5f);
-            m_navigationObstacles.Add(new ObstacleRect
-            {
-                Center = shelfObstacleCenter,
-                HalfExtents = new Vector2(length * 0.5f + 0.12f, depth * 0.5f + 0.12f),
-                YawDegrees = rotation.eulerAngles.y
-            });
-        }
-
-        private bool ShelfFootprintOverlaps(ObstacleRect candidate)
-        {
-            foreach (var shelf in m_shelves)
-            {
-                if (FootprintsOverlap(candidate, shelf.Footprint, 0.15f))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        // Exact world-axis-aligned overlap test. Every footprint in this scene is axis-aligned to a
-        // wall (yaw 0/90/270), so this is exact -- unlike the corner-containment RectsOverlap, which
-        // misses two perpendicular rects crossing in a "+" (a 0deg table over a 90deg table, or
-        // shelves meeting at a corner).
-        private static bool FootprintsOverlap(ObstacleRect a, ObstacleRect b, float gap)
-        {
-            var halfA = WorldAlignedHalfExtents(a);
-            var halfB = WorldAlignedHalfExtents(b);
-            var dx = Mathf.Abs(a.Center.x - b.Center.x);
-            var dz = Mathf.Abs(a.Center.y - b.Center.y);
-            return dx < halfA.x + halfB.x + gap && dz < halfA.y + halfB.y + gap;
-        }
-
-        private static Vector2 WorldAlignedHalfExtents(ObstacleRect rect)
-        {
-            // Axis-aligned at yaw 0 (N/S) or 90/270 (E/W). At ~90 deg the rect's local length/depth
-            // map to world Z/X, so swap to get the true world-axis-aligned half extents.
-            var yaw = Mathf.Abs(Mathf.DeltaAngle(rect.YawDegrees, 0f));
-            var rotated = yaw > 45f && yaw < 135f;
-            return rotated ? new Vector2(rect.HalfExtents.y, rect.HalfExtents.x) : rect.HalfExtents;
         }
 
         private bool TryCreateShelfAssetTier(Transform shelfRoot, int tierIndex, float surfaceY, float targetLength, float targetDepth, out Bounds localBounds)
@@ -2065,15 +1282,12 @@ namespace SimJam.BarrelSimulator
                 {
                     var surfaceY = surfaceHeights != null
                         ? surfaceHeights[tier]
-                        : 1.05f + tier * 0.58f + m_shelfSurfaceClearance;
-                    // Inset the run of slots by a 5 gal barrel's radius (~0.12) + margin so the end
-                    // barrels stay fully on the board instead of hanging off the ends.
-                    var halfUsable = Mathf.Max(0f, usableSize.x * 0.5f - 0.17f);
-                    var count = Mathf.Max(1, Mathf.FloorToInt(halfUsable * 2f / m_shelfBarrelSpacing));
+                        : 1.05f + tier * 0.37f + m_shelfSurfaceClearance;
+                    var count = Mathf.Max(1, Mathf.FloorToInt((usableSize.x - 0.18f) / m_shelfBarrelSpacing));
                     for (var i = 0; i < count; i++)
                     {
                         var t = count == 1 ? 0.5f : i / (float)(count - 1);
-                        var x = Mathf.Lerp(-halfUsable, halfUsable, t);
+                        var x = Mathf.Lerp(-usableSize.x * 0.5f, usableSize.x * 0.5f, t);
                         var localPosition = new Vector3(slotCenter.x + x, surfaceY, slotCenter.z);
                         var worldPosition = shelf.Transform.TransformPoint(localPosition);
 
@@ -2120,12 +1334,7 @@ namespace SimJam.BarrelSimulator
                         continue;
                     }
 
-                    // All barrels stand upright now. Keep the exact RNG draw (and its && short-
-                    // circuit via AllowSideways/Surface) so the UnityEngine.Random stream consumed
-                    // before AssignHotSource is byte-identical to before -- the hidden radioactive
-                    // source must not change. Only the orientation is forced upright.
-                    _ = slot.AllowSideways && slot.Surface != SurfaceKind.Shelf && UnityEngine.Random.value < 0.28f;
-                    const bool isSideways = false;
+                    var isSideways = slot.AllowSideways && slot.Surface != SurfaceKind.Shelf && UnityEngine.Random.value < 0.28f;
                     var spawned = SpawnBarrel(slot, spec, isSideways);
                     m_spawnedBarrels.Add(spawned);
                     m_placedBarrels.Add(new PlacedBarrel
@@ -2139,7 +1348,7 @@ namespace SimJam.BarrelSimulator
 
                     if (slot.Surface == SurfaceKind.Floor)
                     {
-                        m_barrelObstacles.Add(new ObstacleRect
+                        m_navigationObstacles.Add(new ObstacleRect
                         {
                             Center = new Vector2(slot.Position.x, slot.Position.z),
                             HalfExtents = new Vector2(radius, radius),
@@ -2189,9 +1398,9 @@ namespace SimJam.BarrelSimulator
                     Label = "5 GAL",
                     Prefab = m_barrelPrefabs.barrel5GallonPrefab,
                     ModelScale = m_barrel5ModelScale,
-                    Diameter = 0.24f,
-                    Height = 0.31f,
-                    LabelHeight = 0.17f,
+                    Diameter = 0.28f,
+                    Height = 0.36f,
+                    LabelHeight = 0.2f,
                     BodyColor = new Color(0.93f, 0.83f, 0.22f),
                     SelectionWeight = 0.6f
                 }
@@ -2232,9 +1441,7 @@ namespace SimJam.BarrelSimulator
         {
             EnsureScenarioRoot();
             var labelForward = slot.LabelForward.sqrMagnitude > 0.001f ? slot.LabelForward.normalized : Vector3.forward;
-            // Random spin around the barrel's own axis so the same model face never repeats.
-            var spinYaw = UnityEngine.Random.Range(0f, 360f);
-            var yawRotation = Quaternion.LookRotation(labelForward, Vector3.up) * Quaternion.Euler(0f, spinYaw, 0f);
+            var yawRotation = Quaternion.LookRotation(labelForward, Vector3.up);
             var finalRotation = isSideways ? yawRotation * Quaternion.Euler(0f, 0f, 90f) : yawRotation;
             var verticalOffset = isSideways ? spec.Diameter * 0.5f : spec.Height * 0.5f;
             var position = slot.Position + Vector3.up * verticalOffset;
@@ -2242,14 +1449,11 @@ namespace SimJam.BarrelSimulator
             GameObject barrelObject;
             if (spec.Prefab != null)
             {
-                // Instantiate unrotated, fit the scale against the unrotated bounds (a rotated
-                // AABB inflates by up to sqrt(2) and used to distort every barrel differently),
-                // and only then apply the final rotation.
-                barrelObject = Instantiate(spec.Prefab, position, Quaternion.identity, m_scenarioRoot);
-                ApplyFittedScale(barrelObject, spec);
+                barrelObject = Instantiate(spec.Prefab, position, yawRotation, m_scenarioRoot);
+                barrelObject.transform.localScale = spec.ModelScale;
+                FitPrefabToPhysicalSize(barrelObject, spec);
                 barrelObject.transform.rotation = finalRotation;
                 AlignRendererBottomToSurface(barrelObject, slot.Position.y);
-                ApplyBarrelCosmetics(barrelObject, spec);
             }
             else
             {
@@ -2258,13 +1462,7 @@ namespace SimJam.BarrelSimulator
 
             barrelObject.name = $"{spec.Label} Barrel ({slot.SourceName})";
             m_spawnedObjects.Add(barrelObject);
-            EnsureApproximateCollider(barrelObject, spec);
-            RadiationOccluder.Attach(barrelObject, 0.3f);
-
-            if (slot.Surface == SurfaceKind.Floor)
-            {
-                RoomDecorator.AddBlobShadow(m_scenarioRoot, slot.Position, spec.Diameter * 0.62f);
-            }
+            EnsureApproximateCollider(barrelObject, spec, isSideways);
 
             var barrel = barrelObject.GetComponent<BarrelInstance>();
             if (barrel == null)
@@ -2272,234 +1470,8 @@ namespace SimJam.BarrelSimulator
                 barrel = barrelObject.AddComponent<BarrelInstance>();
             }
 
-            var showDebugLabel = false;
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-            showDebugLabel = m_debugLabelsVisible;
-#endif
-            barrel.Initialize(spec.Label, GetRandomRadiationCount(), showDebugLabel);
-            AddBarrelSizeSticker(spec, slot, isSideways, labelForward, finalRotation);
+            barrel.Initialize(spec.Label, GetRandomRadiationCount(), false);
             return barrel;
-        }
-
-        private void AddBarrelSizeSticker(BarrelSpec spec, SpawnSlot slot, bool isSideways, Vector3 labelForward, Quaternion barrelRotation)
-        {
-            var labelMaterial = GetBarrelLabelMaterial(spec);
-            if (labelMaterial == null)
-            {
-                return;
-            }
-
-            var dir = labelForward.sqrMagnitude > 0.001f ? labelForward.normalized : Vector3.forward;
-            // The barrel model's cylinder axis is its local Y; the label arc wraps around it.
-            var axis = (barrelRotation * Vector3.up).normalized;
-
-            Vector3 center;
-            Vector3 faceDir;
-            if (!isSideways)
-            {
-                // Upright: wrap around the vertical barrel at label height, facing the room.
-                center = new Vector3(slot.Position.x, slot.Position.y + spec.LabelHeight, slot.Position.z);
-                faceDir = dir;
-            }
-            else
-            {
-                // Lying barrel: wrap around the (now horizontal) barrel, label facing up.
-                center = new Vector3(slot.Position.x, slot.Position.y + spec.Diameter * 0.5f, slot.Position.z);
-                faceDir = Vector3.up;
-            }
-
-            // Orient so local +Y = cylinder axis and local +Z = the room/up-facing direction.
-            var forward = Vector3.ProjectOnPlane(faceDir, axis);
-            if (forward.sqrMagnitude < 1e-4f)
-            {
-                forward = Vector3.ProjectOnPlane(dir, axis);
-            }
-            if (forward.sqrMagnitude < 1e-4f)
-            {
-                forward = Vector3.forward;
-            }
-
-            var sticker = new GameObject($"{spec.Label} Sticker");
-            sticker.transform.SetParent(m_scenarioRoot, false);
-            sticker.transform.SetPositionAndRotation(center, Quaternion.LookRotation(forward.normalized, axis));
-            sticker.AddComponent<MeshFilter>().sharedMesh = GetBarrelLabelMesh(spec);
-            var renderer = sticker.AddComponent<MeshRenderer>();
-            renderer.sharedMaterial = labelMaterial;
-            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            renderer.receiveShadows = false;
-            m_spawnedObjects.Add(sticker);
-        }
-
-        private Mesh GetBarrelLabelMesh(BarrelSpec spec)
-        {
-            if (m_barrelLabelMeshes.TryGetValue(spec.Size, out var cached) && cached != null)
-            {
-                return cached;
-            }
-
-            // A curved decal that conforms to the barrel surface (proud by 4 mm) and wraps ~80 deg
-            // around the front, so the label hugs the drum instead of floating as a flat plane.
-            var radius = spec.Diameter * 0.5f + 0.004f;
-            var height = spec.Diameter * 0.52f;
-            var mesh = BuildCurvedLabelMesh(radius, 80f, height);
-            m_barrelLabelMeshes[spec.Size] = mesh;
-            return mesh;
-        }
-
-        private static Mesh BuildCurvedLabelMesh(float radius, float arcDegrees, float height)
-        {
-            const int segments = 20;
-            var mesh = new Mesh { name = "Barrel Label Arc" };
-            var ringCount = segments + 1;
-            var vertices = new Vector3[ringCount * 2];
-            var normals = new Vector3[ringCount * 2];
-            var uvs = new Vector2[ringCount * 2];
-            var halfHeight = height * 0.5f;
-            var startAngle = -arcDegrees * 0.5f * Mathf.Deg2Rad;
-            var stepAngle = arcDegrees * Mathf.Deg2Rad / segments;
-
-            for (var i = 0; i < ringCount; i++)
-            {
-                var angle = startAngle + stepAngle * i;
-                var outward = new Vector3(Mathf.Sin(angle), 0f, Mathf.Cos(angle));
-                var radial = outward * radius;
-                var baseIndex = i * 2;
-                vertices[baseIndex] = new Vector3(radial.x, -halfHeight, radial.z);
-                vertices[baseIndex + 1] = new Vector3(radial.x, halfHeight, radial.z);
-                normals[baseIndex] = outward;
-                normals[baseIndex + 1] = outward;
-                // Flip U so the label reads left-to-right for a viewer in the room (the arc's +X
-                // edge is on the viewer's left, so unflipped UVs would mirror the text).
-                var u = 1f - i / (float)segments;
-                uvs[baseIndex] = new Vector2(u, 0f);
-                uvs[baseIndex + 1] = new Vector2(u, 1f);
-            }
-
-            // Double-sided so the label is visible regardless of which way the arc faces.
-            var triangles = new int[segments * 12];
-            for (var i = 0; i < segments; i++)
-            {
-                var b = i * 2;
-                var t = i * 12;
-                triangles[t] = b;
-                triangles[t + 1] = b + 1;
-                triangles[t + 2] = b + 3;
-                triangles[t + 3] = b;
-                triangles[t + 4] = b + 3;
-                triangles[t + 5] = b + 2;
-                triangles[t + 6] = b;
-                triangles[t + 7] = b + 3;
-                triangles[t + 8] = b + 1;
-                triangles[t + 9] = b;
-                triangles[t + 10] = b + 2;
-                triangles[t + 11] = b + 3;
-            }
-
-            mesh.vertices = vertices;
-            mesh.normals = normals;
-            mesh.uv = uvs;
-            mesh.triangles = triangles;
-            mesh.RecalculateBounds();
-            return mesh;
-        }
-
-        private Material GetBarrelLabelMaterial(BarrelSpec spec)
-        {
-            var labelTexture = spec.Size switch
-            {
-                BarrelSize.Gallon55 => ProceduralTextureLibrary.BarrelLabel55,
-                BarrelSize.Gallon30 => ProceduralTextureLibrary.BarrelLabel30,
-                _ => ProceduralTextureLibrary.BarrelLabel5
-            };
-
-            return CreateMaterial(Color.white, $"{spec.Label} Sticker Material", 0f, 0.12f, labelTexture, null);
-        }
-
-        private void ApplyFittedScale(GameObject barrelObject, BarrelSpec spec)
-        {
-            if (m_fittedScaleCache.TryGetValue(spec.Size, out var cachedScale))
-            {
-                barrelObject.transform.localScale = cachedScale;
-                return;
-            }
-
-            barrelObject.transform.localScale = spec.ModelScale;
-            FitPrefabToPhysicalSize(barrelObject, spec);
-            m_fittedScaleCache[spec.Size] = barrelObject.transform.localScale;
-        }
-
-        private void ApplyBarrelCosmetics(GameObject barrelObject, BarrelSpec spec)
-        {
-            var variants = GetBarrelTintVariants(barrelObject, spec);
-            if (variants == null || variants.Length == 0)
-            {
-                return;
-            }
-
-            var material = variants[UnityEngine.Random.Range(0, variants.Length)];
-            foreach (var renderer in barrelObject.GetComponentsInChildren<Renderer>())
-            {
-                renderer.sharedMaterial = material;
-            }
-        }
-
-        private Material[] GetBarrelTintVariants(GameObject barrelObject, BarrelSpec spec)
-        {
-            if (m_barrelTintVariants.TryGetValue(spec.Size, out var cachedVariants))
-            {
-                return cachedVariants;
-            }
-
-            var sourceRenderer = barrelObject.GetComponentInChildren<Renderer>();
-            if (sourceRenderer == null || sourceRenderer.sharedMaterial == null)
-            {
-                m_barrelTintVariants[spec.Size] = Array.Empty<Material>();
-                return null;
-            }
-
-            var baseMaterial = sourceRenderer.sharedMaterial;
-            var baseColor = baseMaterial.HasProperty("_Color") ? baseMaterial.color : spec.BodyColor;
-            var variants = new Material[4];
-            var tints = new[] { 1f, 0.86f, 1.08f, 0.94f };
-            var smoothnessValues = new[] { 0.42f, 0.34f, 0.46f, 0.3f };
-
-            for (var i = 0; i < variants.Length; i++)
-            {
-                var variant = new Material(baseMaterial)
-                {
-                    name = $"{spec.Label} Tint {i + 1}"
-                };
-
-                var tinted = baseColor * tints[i];
-                if (i == 3)
-                {
-                    // Weathered variant: desaturated and a little darker.
-                    var luma = tinted.r * 0.3f + tinted.g * 0.59f + tinted.b * 0.11f;
-                    tinted = Color.Lerp(tinted, new Color(luma, luma, luma, tinted.a), 0.45f) * 0.92f;
-                }
-
-                tinted.a = 1f;
-                if (variant.HasProperty("_Color"))
-                {
-                    variant.color = tinted;
-                }
-
-                if (variant.HasProperty("_Metallic"))
-                {
-                    variant.SetFloat("_Metallic", 0.55f);
-                }
-
-                if (variant.HasProperty("_Glossiness"))
-                {
-                    variant.SetFloat("_Glossiness", smoothnessValues[i]);
-                }
-
-                m_runtimeMaterials.Add(variant);
-                variants[i] = variant;
-            }
-
-            m_barrelTintVariants[spec.Size] = variants;
-            return variants;
         }
 
         private GameObject CreatePlaceholderBarrel(Vector3 position, Quaternion rotation, BarrelSpec spec, bool isSideways)
@@ -2548,7 +1520,7 @@ namespace SimJam.BarrelSimulator
             barrelObject.transform.position += Vector3.up * (surfaceY - bounds.min.y);
         }
 
-        private static void EnsureApproximateCollider(GameObject barrelObject, BarrelSpec spec)
+        private static void EnsureApproximateCollider(GameObject barrelObject, BarrelSpec spec, bool isSideways)
         {
             if (barrelObject.GetComponentInChildren<Collider>() != null)
             {
@@ -2561,12 +1533,8 @@ namespace SimJam.BarrelSimulator
             lossyScale.y = Mathf.Approximately(lossyScale.y, 0f) ? 1f : lossyScale.y;
             lossyScale.z = Mathf.Approximately(lossyScale.z, 0f) ? 1f : lossyScale.z;
 
-            // BoxCollider.size is local space: the barrel axis is always local Y no matter how
-            // the root is rotated (sideways barrels previously got a wrongly permuted box).
-            collider.size = new Vector3(
-                spec.Diameter / lossyScale.x,
-                spec.Height / lossyScale.y,
-                spec.Diameter / lossyScale.z);
+            var worldSize = new Vector3(spec.Diameter, spec.Height, spec.Diameter);
+            collider.size = new Vector3(worldSize.x / lossyScale.x, worldSize.y / lossyScale.y, worldSize.z / lossyScale.z);
 
             if (TryGetRendererBounds(barrelObject, out var bounds))
             {
@@ -2710,22 +1678,11 @@ namespace SimJam.BarrelSimulator
             if (m_enableTeleport)
             {
                 UpdateTeleportTarget();
-                if (OVRInput.GetDown(OVRInput.RawButton.RIndexTrigger))
+                if (m_hasValidTeleportTarget && OVRInput.GetDown(OVRInput.RawButton.RIndexTrigger))
                 {
-                    if (m_hasValidTeleportTarget)
-                    {
-                        CommitTeleport(m_currentTeleportTarget);
-                        HideMessage();
-                    }
-                    else
-                    {
-                        // Pressed teleport while aiming at a blocked (red) spot.
-                        ShowMessage("Can't move there\nAim at a GREEN ring", new Color(1f, 0.86f, 0.2f), 2.5f);
-                    }
+                    MoveRigTo(m_currentTeleportTarget);
                 }
             }
-
-            UpdateMessagePanel();
         }
 
         private void UpdateTeleportTarget()
@@ -2734,21 +1691,14 @@ namespace SimJam.BarrelSimulator
 
             var ray = GetTeleportRay();
             var floorPlane = new Plane(Vector3.up, Vector3.zero);
-            var wasValid = m_hasValidTeleportTarget;
             m_hasValidTeleportTarget = false;
             if (floorPlane.Raycast(ray, out var hitDistance))
             {
                 var candidate = ray.GetPoint(hitDistance);
                 candidate.y = 0f;
-                // Reliability: instead of pass/fail on the exact ray hit, snap to the nearest
-                // standable spot (so near-wall / near-edge aims land beside the obstacle rather
-                // than going red). Door-crossing is checked on the SNAPPED point.
-                if (hitDistance > 0.25f && hitDistance < m_maxTeleportDistance
-                    && TryFindStandablePosition(candidate, out var snapped)
-                    && !TeleportCrossesClosedDoor(ray.origin, snapped)
-                    && !TeleportCrossesSolidWall(ray.origin, snapped))
+                if (hitDistance > 0.25f && hitDistance < 8f && IsWalkablePosition(candidate) && !TeleportCrossesClosedDoor(ray.origin, candidate))
                 {
-                    m_currentTeleportTarget = snapped;
+                    m_currentTeleportTarget = candidate;
                     m_hasValidTeleportTarget = true;
                 }
             }
@@ -2756,19 +1706,7 @@ namespace SimJam.BarrelSimulator
             m_teleportMarker.SetActive(m_enableTeleport);
             if (m_hasValidTeleportTarget)
             {
-                // Smooth the marker visual (frame-rate independent) to kill controller-ray jitter;
-                // commit still uses the exact snapped target. Re-acquire snaps instantly.
-                if (!wasValid)
-                {
-                    m_teleportMarkerSmoothedPosition = m_currentTeleportTarget;
-                }
-                else
-                {
-                    var t = 1f - Mathf.Exp(-m_teleportMarkerSmoothing * Time.deltaTime);
-                    m_teleportMarkerSmoothedPosition = Vector3.Lerp(m_teleportMarkerSmoothedPosition, m_currentTeleportTarget, t);
-                }
-
-                m_teleportMarker.transform.position = m_teleportMarkerSmoothedPosition + Vector3.up * 0.012f;
+                m_teleportMarker.transform.position = m_currentTeleportTarget + Vector3.up * 0.012f;
                 m_teleportMarkerRenderer.sharedMaterial = m_validTeleportMaterial;
             }
             else
@@ -2778,75 +1716,6 @@ namespace SimJam.BarrelSimulator
                 m_teleportMarker.transform.position = fallback;
                 m_teleportMarkerRenderer.sharedMaterial = m_invalidTeleportMaterial;
             }
-        }
-
-        // Returns the nearest standable position to an aimed floor point, searching outward in
-        // rings. This is what makes teleport reliable: a hit a few cm into a wall, barrel keep-out,
-        // or just off a valid spot resolves to the closest place the player can actually stand,
-        // rather than being rejected. All keep-outs (walls, furniture, barrels, closed door) are
-        // still enforced at every sample via IsStandable.
-        private bool TryFindStandablePosition(Vector3 aim, out Vector3 result)
-        {
-            aim.y = 0f;
-            if (IsStandable(aim))
-            {
-                result = aim;
-                return true;
-            }
-
-            const int rings = 6;
-            const int spokes = 12;
-            var step = Mathf.Max(0.04f, m_teleportSnapStep);
-            for (var r = 1; r <= rings; r++)
-            {
-                var radius = r * step;
-                for (var s = 0; s < spokes; s++)
-                {
-                    var angle = Mathf.PI * 2f * s / spokes;
-                    var sample = aim + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * radius;
-                    if (IsStandable(sample))
-                    {
-                        result = sample;
-                        return true;
-                    }
-                }
-            }
-
-            result = aim;
-            return false;
-        }
-
-        // Geometric standability test (no ClampToRoom self-reject): inside a room, clear of the
-        // shared wall, the closed door, furniture footprints, and barrel keep-outs.
-        private bool IsStandable(Vector3 position)
-        {
-            if (!IsInsideWalkableFloorPlan(position, m_edgeMargin))
-            {
-                return false;
-            }
-
-            if (!IsDoorOpenForNavigation && IsInsideClosedDoorObstacle(position, m_edgeMargin))
-            {
-                return false;
-            }
-
-            foreach (var obstacle in m_navigationObstacles)
-            {
-                if (IsPointInsideRect(position, obstacle, m_edgeMargin))
-                {
-                    return false;
-                }
-            }
-
-            foreach (var barrel in m_barrelObstacles)
-            {
-                if (IsPointInsideRect(position, barrel, m_barrelClearance))
-                {
-                    return false;
-                }
-            }
-
-            return true;
         }
 
         private Ray GetTeleportRay()
@@ -2896,299 +1765,29 @@ namespace SimJam.BarrelSimulator
             }
         }
 
-        private void CommitTeleport(Vector3 worldPosition)
+        private void HandleDoorInteraction()
         {
-            if (m_locomotionRoot == null)
+            if (m_doorPivot == null || Time.time < m_nextDoorToggleTime)
             {
                 return;
             }
 
-            // The target already passed ClampToRoom + IsWalkablePosition this frame in
-            // UpdateTeleportTarget. Re-clamp defensively (keeps the rig inside the room) but commit
-            // even if a sub-0.02 m clamp nudge would flip the strict re-check -- a validated
-            // teleport must never silently fail.
-            var clamped = ClampToRoom(worldPosition);
-            clamped.y = m_locomotionRoot == m_cameraTransform && m_cameraRig == null ? m_defaultEyeHeight : 0f;
-            m_locomotionRoot.position = clamped;
-        }
-
-        // Shared head-locked message panel used for teleport hints AND game-loop results (red
-        // "incorrect" / green "found it"). The dark backing auto-sizes to the text every time a
-        // message is shown, so copy never overflows its box. A designer can ignore this entirely
-        // and drive their own UI off OnSimulationStarted / OnGuessResolved instead.
-        private void EnsureMessagePanel()
-        {
-            if (m_messagePanel != null || m_cameraTransform == null)
+            var leftGripPressed = OVRInput.GetDown(OVRInput.RawButton.LHandTrigger);
+            var rightGripPressed = OVRInput.GetDown(OVRInput.RawButton.RHandTrigger);
+            if (!leftGripPressed && !rightGripPressed)
             {
                 return;
             }
 
-            var panelRoot = new GameObject("Message Panel");
-            panelRoot.transform.SetParent(m_cameraTransform, false);
-            panelRoot.transform.localPosition = new Vector3(0f, -0.12f, 1.1f);
-            panelRoot.transform.localRotation = Quaternion.identity;
-
-            // Dark backing for contrast. Clone the project's transparent blob material so the
-            // alpha-blend Standard variant ships in the Quest build and the panel can fade.
-            var blobBase = Resources.Load<Material>("SimJamBlobShadow");
-            if (blobBase != null)
-            {
-                m_messageBackingMaterial = new Material(blobBase) { name = "Message Backing" };
-                m_messageBackingMaterial.mainTexture = null;
-                m_messageBackingMaterial.color = new Color(0.04f, 0.04f, 0.05f, 0.78f);
-                m_runtimeMaterials.Add(m_messageBackingMaterial);
-
-                var backing = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                backing.name = "Message Backing";
-                backing.transform.SetParent(panelRoot.transform, false);
-                backing.transform.localPosition = new Vector3(0f, 0f, 0.02f);
-                backing.transform.localScale = new Vector3(0.6f, 0.26f, 0.004f);
-                DisableCollider(backing);
-                backing.GetComponent<Renderer>().sharedMaterial = m_messageBackingMaterial;
-                m_messageBacking = backing.transform;
-            }
-
-            var textObject = new GameObject("Message Text");
-            textObject.transform.SetParent(panelRoot.transform, false);
-            var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            m_messageText = textObject.AddComponent<TextMesh>();
-            m_messageText.font = font;
-            textObject.GetComponent<MeshRenderer>().sharedMaterial = font.material;
-            m_messageText.anchor = TextAnchor.MiddleCenter;
-            m_messageText.alignment = TextAlignment.Center;
-            // Smaller than before so copy fits comfortably; the backing then sizes itself to match.
-            m_messageText.characterSize = 0.012f;
-            m_messageText.fontSize = 90;
-            m_messageText.color = m_messageColor;
-
-            panelRoot.SetActive(false);
-            m_messagePanel = panelRoot;
-        }
-
-        // Public-friendly entry point so a ported-in UI could also reuse the placeholder panel.
-        private void ShowMessage(string text, Color color, float holdDuration)
-        {
-            EnsureMessagePanel();
-            if (m_messagePanel == null || m_messageText == null)
+            var leftNearKnob = leftGripPressed && IsControllerNearDoorKnob(m_cameraRig != null ? m_cameraRig.leftControllerAnchor : null);
+            var rightNearKnob = rightGripPressed && IsControllerNearDoorKnob(m_cameraRig != null ? m_cameraRig.rightControllerAnchor : null);
+            if (!leftNearKnob && !rightNearKnob)
             {
                 return;
             }
 
-            m_messageColor = color;
-            m_messageText.text = text;
-            m_messageHoldDuration = Mathf.Max(0.1f, holdDuration);
-            m_messageStartTime = Time.time;
-            m_messageResizePending = true;
-            SetMessageAlpha(0f);
-            m_messagePanel.SetActive(true);
-        }
-
-        private void HideMessage()
-        {
-            if (m_messagePanel != null && m_messagePanel.activeSelf)
-            {
-                m_messagePanel.SetActive(false);
-            }
-        }
-
-        private void UpdateMessagePanel()
-        {
-            if (m_messagePanel == null || !m_messagePanel.activeSelf)
-            {
-                return;
-            }
-
-            // Auto-fit the backing box to the text once the TextMesh has generated its mesh (its
-            // bounds are zero for a frame). The box is sized in the panel's own frame (world AABB /
-            // lossyScale), so it always contains the text — copy can never overflow the box.
-            if (m_messageResizePending && m_messageBacking != null)
-            {
-                var renderer = m_messageText.GetComponent<Renderer>();
-                if (renderer != null && renderer.bounds.size.x > 1e-4f)
-                {
-                    var worldSize = renderer.bounds.size;
-                    var lossyScale = m_messagePanel.transform.lossyScale;
-                    var localWidth = worldSize.x / Mathf.Max(1e-4f, Mathf.Abs(lossyScale.x));
-                    var localHeight = worldSize.y / Mathf.Max(1e-4f, Mathf.Abs(lossyScale.y));
-                    localWidth = Mathf.Clamp(localWidth + 0.14f, 0.24f, 1.6f);
-                    localHeight = Mathf.Clamp(localHeight + 0.1f, 0.14f, 0.9f);
-                    m_messageBacking.localScale = new Vector3(localWidth, localHeight, 0.004f);
-                    m_messageResizePending = false;
-                }
-            }
-
-            // Fade in, hold (per-message), fade out, then hide.
-            const float fadeIn = 0.25f;
-            const float fadeOut = 0.45f;
-            var hold = m_messageHoldDuration;
-            var elapsed = Time.time - m_messageStartTime;
-
-            float alpha;
-            if (elapsed < fadeIn)
-            {
-                alpha = elapsed / fadeIn;
-            }
-            else if (elapsed < fadeIn + hold)
-            {
-                alpha = 1f;
-            }
-            else if (elapsed < fadeIn + hold + fadeOut)
-            {
-                alpha = 1f - (elapsed - fadeIn - hold) / fadeOut;
-            }
-            else
-            {
-                m_messagePanel.SetActive(false);
-                return;
-            }
-
-            SetMessageAlpha(Mathf.Clamp01(alpha));
-        }
-
-        private void SetMessageAlpha(float alpha)
-        {
-            if (m_messageText != null)
-            {
-                var textColor = m_messageColor;
-                textColor.a = alpha;
-                m_messageText.color = textColor;
-            }
-
-            if (m_messageBackingMaterial != null)
-            {
-                var backingColor = m_messageBackingMaterial.color;
-                backingColor.a = alpha * 0.82f;
-                m_messageBackingMaterial.color = backingColor;
-            }
-        }
-
-        private void HandleDoorGrab()
-        {
-            if (m_doorPivot == null)
-            {
-                return;
-            }
-
-            if (m_doorGrabController == OVRInput.Controller.None)
-            {
-                TryStartDoorGrab(m_cameraRig != null ? m_cameraRig.rightControllerAnchor : null, OVRInput.RawButton.RHandTrigger, OVRInput.Controller.RTouch);
-                TryStartDoorGrab(m_cameraRig != null ? m_cameraRig.leftControllerAnchor : null, OVRInput.RawButton.LHandTrigger, OVRInput.Controller.LTouch);
-                return;
-            }
-
-            var gripAxis = m_doorGrabController == OVRInput.Controller.LTouch
-                ? OVRInput.RawAxis1D.LHandTrigger
-                : OVRInput.RawAxis1D.RHandTrigger;
-            if (m_doorGrabAnchor == null || OVRInput.Get(gripAxis) < 0.35f)
-            {
-                EndDoorGrab();
-            }
-        }
-
-        private void TryStartDoorGrab(Transform anchor, OVRInput.RawButton gripButton, OVRInput.Controller controller)
-        {
-            if (m_doorGrabController != OVRInput.Controller.None || anchor == null)
-            {
-                return;
-            }
-
-            if (!OVRInput.GetDown(gripButton) || !IsControllerNearDoorKnob(anchor))
-            {
-                return;
-            }
-
-            m_doorGrabController = controller;
-            m_lastDoorGrabController = controller;
-            m_doorGrabAnchor = anchor;
-            m_doorGrabAngleOffset = Mathf.DeltaAngle(ComputeHandHingeAngle(anchor.position), m_doorCurrentAngle);
-            PulseHaptic(controller, 0.4f, 0.25f, 0.06f);
-        }
-
-        private void EndDoorGrab()
-        {
-            m_doorGrabController = OVRInput.Controller.None;
-            m_doorGrabAnchor = null;
-        }
-
-        private float ComputeHandHingeAngle(Vector3 worldPosition)
-        {
-            var parentSpace = m_doorPivot.parent != null
-                ? m_doorPivot.parent.InverseTransformPoint(worldPosition)
-                : worldPosition;
-            var offset = parentSpace - m_doorPivot.localPosition;
-            if (new Vector2(offset.x, offset.z).sqrMagnitude < 0.0001f)
-            {
-                return m_doorCurrentAngle;
-            }
-
-            // Door yaw 0 points along +X from the hinge; Unity yaw rotates +X toward -Z.
-            return Mathf.Atan2(-offset.z, offset.x) * Mathf.Rad2Deg;
-        }
-
-        private void UpdateDoorMotion()
-        {
-            if (m_doorPivot == null)
-            {
-                return;
-            }
-
-            var minAngle = Mathf.Min(0f, m_doorOpenAngle);
-            var maxAngle = Mathf.Max(0f, m_doorOpenAngle);
-
-            if (m_doorGrabController != OVRInput.Controller.None && m_doorGrabAnchor != null)
-            {
-                var targetAngle = ComputeHandHingeAngle(m_doorGrabAnchor.position) + m_doorGrabAngleOffset;
-                targetAngle = Mathf.Clamp(targetAngle, minAngle, maxAngle);
-                var follow = 1f - Mathf.Exp(-m_doorFollowSharpness * Time.deltaTime);
-                m_doorCurrentAngle = Mathf.LerpAngle(m_doorCurrentAngle, targetAngle, follow);
-            }
-            else if (m_doorCurrentAngle != 0f && Mathf.Abs(m_doorCurrentAngle) <= m_doorLatchAngle)
-            {
-                // Latch: a nearly-closed released door settles shut with a click.
-                m_doorCurrentAngle = Mathf.MoveTowards(m_doorCurrentAngle, 0f, 60f * Time.deltaTime);
-                if (m_doorCurrentAngle == 0f)
-                {
-                    PulseHaptic(m_lastDoorGrabController, 0.6f, 0.4f, 0.08f);
-                }
-            }
-
-            m_doorCurrentAngle = Mathf.Clamp(m_doorCurrentAngle, minAngle, maxAngle);
-            m_doorPivot.localRotation = Quaternion.Euler(0f, m_doorCurrentAngle, 0f);
-        }
-
-        private void PulseHaptic(OVRInput.Controller controller, float frequency, float amplitude, float duration)
-        {
-            if (controller == OVRInput.Controller.None)
-            {
-                return;
-            }
-
-            OVRInput.SetControllerVibration(frequency, amplitude, controller);
-            if (controller == OVRInput.Controller.LTouch)
-            {
-                m_leftPulseActive = true;
-                m_leftPulseEndTime = Time.time + duration;
-            }
-            else
-            {
-                m_rightPulseActive = true;
-                m_rightPulseEndTime = Time.time + duration;
-            }
-        }
-
-        private void UpdateHapticPulse()
-        {
-            if (m_leftPulseActive && Time.time >= m_leftPulseEndTime)
-            {
-                OVRInput.SetControllerVibration(0f, 0f, OVRInput.Controller.LTouch);
-                m_leftPulseActive = false;
-            }
-
-            if (m_rightPulseActive && Time.time >= m_rightPulseEndTime)
-            {
-                OVRInput.SetControllerVibration(0f, 0f, OVRInput.Controller.RTouch);
-                m_rightPulseActive = false;
-            }
+            m_isDoorOpen = !m_isDoorOpen;
+            m_nextDoorToggleTime = Time.time + m_doorToggleCooldown;
         }
 
         private bool IsControllerNearDoorKnob(Transform controllerAnchor)
@@ -3206,6 +1805,18 @@ namespace SimJam.BarrelSimulator
         private static bool IsPointNearTransform(Vector3 point, Transform target, float radius)
         {
             return target != null && Vector3.Distance(point, target.position) <= radius;
+        }
+
+        private void UpdateDoorSwing()
+        {
+            if (m_doorPivot == null)
+            {
+                return;
+            }
+
+            var targetAngle = m_isDoorOpen ? m_doorOpenAngle : 0f;
+            m_doorCurrentAngle = Mathf.MoveTowardsAngle(m_doorCurrentAngle, targetAngle, m_doorSwingSpeed * Time.deltaTime);
+            m_doorPivot.localRotation = Quaternion.Euler(0f, m_doorCurrentAngle, 0f);
         }
 
         private void SnapTurn(float yawDegrees)
@@ -3228,29 +1839,19 @@ namespace SimJam.BarrelSimulator
                 return false;
             }
 
-            if (!IsInsideWalkableFloorPlan(position, m_edgeMargin))
+            if (!IsInsideWalkableFloorPlan(position, m_playerRadius + 0.08f))
             {
                 return false;
             }
 
-            if (!IsDoorOpenForNavigation && IsInsideClosedDoorObstacle(position, m_edgeMargin))
+            if (!m_isDoorOpen && IsInsideClosedDoorObstacle(position, m_playerRadius + 0.08f))
             {
                 return false;
             }
 
             foreach (var obstacle in m_navigationObstacles)
             {
-                if (IsPointInsideRect(position, obstacle, m_edgeMargin))
-                {
-                    return false;
-                }
-            }
-
-            // Floor barrels use a tight keep-out (~radius + m_barrelClearance) so the player can
-            // step right up to a barrel to scan it, but never stand inside the cylinder.
-            foreach (var barrel in m_barrelObstacles)
-            {
-                if (IsPointInsideRect(position, barrel, m_barrelClearance))
+                if (IsPointInsideRect(position, obstacle, m_playerRadius + 0.08f))
                 {
                     return false;
                 }
@@ -3261,12 +1862,12 @@ namespace SimJam.BarrelSimulator
 
         private Vector3 ClampToRoom(Vector3 position)
         {
-            if (IsInsideWalkableFloorPlan(position, m_edgeMargin))
+            if (IsInsideWalkableFloorPlan(position, m_playerRadius + 0.08f))
             {
                 return position;
             }
 
-            var margin = m_edgeMargin;
+            var margin = m_playerRadius + 0.08f;
             var labCandidate = ClampToRect(position, Vector3.zero, RoomSizeMeters, margin);
             var spawnCandidate = ClampToRect(position, SpawnRoomCenter, SpawnRoomSizeMeters, margin);
             var doorCandidate = GetDoorwayCenter();
@@ -3309,7 +1910,7 @@ namespace SimJam.BarrelSimulator
 
         private bool TeleportCrossesClosedDoor(Vector3 from, Vector3 to)
         {
-            if (IsDoorOpenForNavigation)
+            if (m_isDoorOpen)
             {
                 return false;
             }
@@ -3331,34 +1932,6 @@ namespace SimJam.BarrelSimulator
             var t = Mathf.Clamp01((doorZ - from.z) / segmentZ);
             var crossingX = Mathf.Lerp(from.x, to.x, t);
             return Mathf.Abs(crossingX) <= m_doorwayWidth * 0.5f + m_playerRadius;
-        }
-
-        // Blocks teleporting straight through the SOLID part of the shared wall (the segments either
-        // side of the doorway), regardless of door state. The nearest-standable snap can otherwise
-        // land a target up to ~0.72 m past the 0.20 m wall keep-out band — i.e. in the other room —
-        // when the near side is fully blocked by drums/furniture against the wall. A legitimate
-        // through-the-doorway teleport (|crossingX| within the opening) is still allowed here and is
-        // gated separately by TeleportCrossesClosedDoor when the door is shut.
-        private bool TeleportCrossesSolidWall(Vector3 from, Vector3 to)
-        {
-            var wallZ = GetDoorwayCenter().z;
-            var fromSide = from.z - wallZ;
-            var toSide = to.z - wallZ;
-            if (Mathf.Approximately(fromSide, 0f) || Mathf.Approximately(toSide, 0f) || Mathf.Sign(fromSide) == Mathf.Sign(toSide))
-            {
-                return false;
-            }
-
-            var segmentZ = to.z - from.z;
-            if (Mathf.Approximately(segmentZ, 0f))
-            {
-                return false;
-            }
-
-            var t = Mathf.Clamp01((wallZ - from.z) / segmentZ);
-            var crossingX = Mathf.Lerp(from.x, to.x, t);
-            // Outside the doorway opening => it is solid wall, so the crossing is never allowed.
-            return Mathf.Abs(crossingX) > m_doorwayWidth * 0.5f;
         }
 
         private bool IsInsideLabRoom(Vector3 position, float margin)
@@ -3419,7 +1992,7 @@ namespace SimJam.BarrelSimulator
 
             foreach (var existing in m_navigationObstacles)
             {
-                if (FootprintsOverlap(footprint, existing, padding))
+                if (RectsOverlap(footprint, existing, padding))
                 {
                     return false;
                 }
@@ -3604,48 +2177,17 @@ namespace SimJam.BarrelSimulator
 
         private Material CreateMaterial(Color color, string materialName)
         {
-            return CreateMaterial(color, materialName, 0f, 0.5f, null, null);
-        }
-
-        private Material CreateMaterial(Color color, string materialName, float metallic, float smoothness, Texture2D albedo, Color? emission)
-        {
-            var albedoId = albedo != null ? albedo.GetInstanceID() : 0;
-            var emissionKey = emission.HasValue
-                ? $"{emission.Value.r:0.00}_{emission.Value.g:0.00}_{emission.Value.b:0.00}"
-                : "none";
-            var key = $"{materialName}_{color.r:0.000}_{color.g:0.000}_{color.b:0.000}_{color.a:0.000}_{metallic:0.00}_{smoothness:0.00}_{albedoId}_{emissionKey}";
+            var key = $"{materialName}_{color.r:0.000}_{color.g:0.000}_{color.b:0.000}_{color.a:0.000}";
             if (m_materialCache.TryGetValue(key, out var existingMaterial))
             {
                 return existingMaterial;
             }
 
-            Material material;
-            if (emission.HasValue)
+            var material = new Material(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"))
             {
-                // Clone the pre-authored emissive material so the _EMISSION variant ships in builds.
-                var emissiveBase = Resources.Load<Material>("SimJamEmissiveScreen");
-                material = emissiveBase != null ? new Material(emissiveBase) : new Material(Shader.Find("Standard"));
-                if (emissiveBase == null)
-                {
-                    material.EnableKeyword("_EMISSION");
-                }
-
-                material.SetColor("_EmissionColor", emission.Value);
-            }
-            else
-            {
-                material = new Material(Shader.Find("Standard"));
-            }
-
-            material.name = materialName;
-            material.color = color;
-            material.SetFloat("_Metallic", Mathf.Clamp01(metallic));
-            material.SetFloat("_Glossiness", Mathf.Clamp01(smoothness));
-            if (albedo != null)
-            {
-                material.mainTexture = albedo;
-            }
-
+                name = materialName,
+                color = color
+            };
             m_materialCache[key] = material;
             m_runtimeMaterials.Add(material);
             return material;
@@ -3653,7 +2195,7 @@ namespace SimJam.BarrelSimulator
 
         private void SetStatus(string message)
         {
-            Debug.Log($"RadiationLabRoomSpawner: {message}");
+            Debug.Log($"BasicVRRoomBarrelSpawner: {message}");
         }
 
         private void OnDestroy()
@@ -3666,18 +2208,8 @@ namespace SimJam.BarrelSimulator
                 }
             }
 
-            foreach (var labelMesh in m_barrelLabelMeshes.Values)
-            {
-                if (labelMesh != null)
-                {
-                    Destroy(labelMesh);
-                }
-            }
-
             m_runtimeMaterials.Clear();
             m_materialCache.Clear();
-            m_barrelTintVariants.Clear();
-            m_barrelLabelMeshes.Clear();
         }
 
         private void OnValidate()
@@ -3692,8 +2224,6 @@ namespace SimJam.BarrelSimulator
             m_maxTables = Mathf.Max(m_minTables, m_maxTables);
             m_maxShelfUnits = Mathf.Max(m_minShelfUnits, m_maxShelfUnits);
             m_centralAisleWidth = Mathf.Min(m_centralAisleWidth, Mathf.Min(RoomSizeMeters.x, RoomSizeMeters.y) * 0.45f);
-            m_maxSourceActivityCps = Mathf.Max(m_minSourceActivityCps, m_maxSourceActivityCps);
-            m_fittedScaleCache.Clear();
         }
 
         private void OnDrawGizmos()
@@ -3728,6 +2258,7 @@ namespace SimJam.BarrelSimulator
             Gizmos.color = new Color(1f, 0.8f, 0.05f, 0.75f);
             Gizmos.DrawWireCube(floorCenter, new Vector3(m_centralAisleWidth, 0.025f, size.y));
             Gizmos.DrawWireCube(floorCenter, new Vector3(size.x, 0.025f, m_centralAisleWidth));
+
         }
 
         private struct ScenarioResult

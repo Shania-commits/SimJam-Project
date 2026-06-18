@@ -10,6 +10,11 @@ namespace SimJam.BarrelSimulator
         private static Material s_leftHandMaterial;
         private static Material s_rightHandMaterial;
 
+        // When set (e.g. to the SDK's authentic Meta/Lit BasicHandMaterial), it is used for the
+        // hand mesh instead of the code-built fallback skin material. Optional; null keeps the
+        // fallback. Set by the caller before TryEnsure; leaving it null preserves prior behavior.
+        public static Material OverrideHandMaterial { get; set; }
+
         public static bool TryEnsure(OVRCameraRig rig, ref GameObject leftHandVisual, ref GameObject rightHandVisual, float scale)
         {
             if (rig == null)
@@ -97,10 +102,21 @@ namespace SimJam.BarrelSimulator
             SetSerializedField(mesh, "_meshType", isLeft ? OVRMesh.MeshType.XRHandLeft : OVRMesh.MeshType.XRHandRight);
 
             var renderer = root.AddComponent<SkinnedMeshRenderer>();
-            renderer.sharedMaterial = isLeft ? LeftHandMaterial : RightHandMaterial;
+            renderer.sharedMaterial = OverrideHandMaterial != null
+                ? OverrideHandMaterial
+                : (isLeft ? LeftHandMaterial : RightHandMaterial);
             renderer.updateWhenOffscreen = false;
 
-            root.AddComponent<OVRMeshRenderer>();
+            var meshRenderer = root.AddComponent<OVRMeshRenderer>();
+            // Keep the solid hand mesh rendered while controllers are held. The default
+            // ToggleRenderer behavior disables the SkinnedMeshRenderer whenever optical hand
+            // tracking confidence is not High (which is exactly when a controller is in hand),
+            // so the real Meta hand mesh kept getting switched off and read as broken/"skeleton"
+            // hands. None never hides it; the controller-driven poses configured above keep it
+            // posed naturally — matching the Quest home-screen hands.
+            SetSerializedField(meshRenderer, "_confidenceBehavior", OVRMeshRenderer.ConfidenceBehavior.None);
+            SetSerializedField(meshRenderer, "_systemGestureBehavior", OVRMeshRenderer.SystemGestureBehavior.None);
+
             root.SetActive(true);
             return root;
         }
@@ -138,11 +154,9 @@ namespace SimJam.BarrelSimulator
 
         private static Material CreateHandMaterial(string materialName, Color color)
         {
-            var shader = Shader.Find("Universal Render Pipeline/Lit");
-            if (shader == null)
-            {
-                shader = Shader.Find("Standard");
-            }
+            // Built-in pipeline project: use Standard. (A URP/Lit lookup that resolved here
+            // would render magenta, so don't attempt it.)
+            var shader = Shader.Find("Standard");
 
             var material = new Material(shader)
             {

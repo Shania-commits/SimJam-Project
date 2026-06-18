@@ -9,8 +9,14 @@ namespace SimJam.BarrelSimulator
     [RequireComponent(typeof(Rigidbody))]
     public class GrabbableTool : MonoBehaviour
     {
-        public Vector3 HeldLocalPosition = new Vector3(0f, 0.01f, 0.04f);
-        public Vector3 HeldLocalEuler = new Vector3(-35f, 0f, 0f);
+        // Held pose is aligned to the tool's GRIP, not its pivot. The detector's grip handle sits
+        // ~7.5 cm below its body-centre pivot, and the Meta "Natural" fist closes at the controller
+        // anchor, so we raise + pitch the object so the handle nests in the fist and the body rises
+        // up-and-forward out of the top of the hand (flashlight/scanner hold). +55deg about X makes
+        // the tool's +Y axis (its aim/measurement axis) point forward-and-up where the user aims,
+        // and (0,0.040,0.065) is the inverse-grip offset that seats the handle in the fist.
+        public Vector3 HeldLocalPosition = new Vector3(0f, 0.040f, 0.065f);
+        public Vector3 HeldLocalEuler = new Vector3(55f, 0f, 0f);
 
         public bool IsHeld
         {
