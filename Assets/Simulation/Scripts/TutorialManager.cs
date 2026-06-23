@@ -341,6 +341,18 @@ namespace SimJam.Tutorial
             });
             m_steps.Add(new TutorialStep
             {
+                title = "Tutorial: Teleportation",
+                caption = "Aim at the floor with your right controller and press the right trigger to teleport.\n\nTeleport to continue.",
+                requireCompletionToContinue = true
+            });
+            m_steps.Add(new TutorialStep
+            {
+                title = "Tutorial: Detector Operations",
+                caption = "Hold the grip button near the IdentiFINDER to pick it up.\n\nPoint it at a barrel and watch the reading change to continue.",
+                requireCompletionToContinue = true
+            });
+            m_steps.Add(new TutorialStep
+            {
                 title = "Tutorial Complete",
                 caption = "You have completed the basic inspection tutorial.\n\nReview the mission briefing before entering the container inspection room.",
                 nextButtonLabel = "Mission Briefing"

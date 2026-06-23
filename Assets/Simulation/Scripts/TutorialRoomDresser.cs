@@ -11,7 +11,6 @@ namespace SimJam.Tutorial
         [SerializeField] private GameObject m_barrel55Prefab;
         [SerializeField] private GameObject m_barrel30Prefab;
         [SerializeField] private GameObject m_barrel5Prefab;
-        [SerializeField] private GameObject m_identifinderPrefab;
 
         [Header("Generation")]
         [SerializeField] private bool m_buildInEditor = true;
@@ -37,6 +36,7 @@ namespace SimJam.Tutorial
 
         private static readonly Vector3 FloorBarrel55Scale = new Vector3(0.19567f, 0.285f, 0.19567f);
         private static readonly Vector3 FloorBarrel30Scale = new Vector3(0.14f, 0.215f, 0.14f);
+        private static readonly Vector3 ShelfSmallBarrelScale = new Vector3(0.12f, 0.12f, 0.12f);
 
         private void Awake()
         {
@@ -145,7 +145,7 @@ namespace SimJam.Tutorial
             m_radiationPosterMaterial = CreateMaterial("Tutorial Radiation Poster", Color.white, 0f, 0.35f, SimJam.BarrelSimulator.ProceduralTextureLibrary.RadiationPoster256);
             m_labelMaterial = CreateMaterial("Tutorial Label Paper", new Color(0.92f, 0.90f, 0.76f), 0f, 0.32f, null);
             m_blueMaterial = CreateMaterial("Tutorial Blue Stencil", new Color(0.05f, 0.36f, 0.58f), 0f, 0.25f, null);
-            m_barrelBlackMaterial = CreateMaterial("Tutorial Black Barrel", new Color(0.055f, 0.06f, 0.06f), 0.25f, 0.35f, null);
+            m_barrelBlackMaterial = CreateMaterial("Tutorial Black Barrel", new Color(0.12f, 0.13f, 0.13f), 0.25f, 0.35f, null);
             m_barrelGrayMaterial = CreateMaterial("Tutorial White Barrel", new Color(0.78f, 0.80f, 0.78f), 0.35f, 0.4f, null);
         }
 
@@ -197,20 +197,6 @@ namespace SimJam.Tutorial
             CreateCube(station.transform, "Detector Dock Base", Vector3.zero, new Vector3(0.40f, 0.035f, 0.24f), m_darkMetalMaterial, false);
             CreateCube(station.transform, "Dock Left Rail", new Vector3(-0.16f, 0.045f, 0f), new Vector3(0.035f, 0.035f, 0.22f), m_metalMaterial, false);
             CreateCube(station.transform, "Dock Right Rail", new Vector3(0.16f, 0.045f, 0f), new Vector3(0.035f, 0.035f, 0.22f), m_metalMaterial, false);
-
-            if (m_identifinderPrefab != null)
-            {
-                var identifinder = Instantiate(m_identifinderPrefab, station.transform);
-                identifinder.name = "IdentiFINDER Asset";
-                identifinder.transform.localPosition = new Vector3(0f, 0.095f, 0.01f);
-                identifinder.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-                identifinder.transform.localScale = new Vector3(0.012f, 0.012f, 0.012f);
-                return;
-            }
-
-            CreateCube(station.transform, "IdentiFINDER Body Placeholder", new Vector3(0f, 0.09f, 0.01f), new Vector3(0.12f, 0.07f, 0.28f), m_blackMaterial, false);
-            CreateCube(station.transform, "IdentiFINDER Screen", new Vector3(0f, 0.128f, 0.05f), new Vector3(0.08f, 0.012f, 0.09f), m_blueMaterial, false);
-            CreateCylinder(station.transform, "Detector Probe Cap", new Vector3(0f, 0.09f, 0.18f), new Vector3(0.045f, 0.035f, 0.045f), m_metalMaterial, false, Quaternion.Euler(90f, 0f, 0f));
         }
 
         private void BuildClipboard(Transform parent, string objectName, Vector3 position, Quaternion rotation)
@@ -266,10 +252,21 @@ namespace SimJam.Tutorial
                 CreateCube(shelfRoot.transform, $"Shelf Deck {i + 1}", new Vector3(0f, shelfHeights[i], 0f), new Vector3(width, 0.07f, depth), m_metalMaterial, true);
             }
 
-            SpawnAssetBarrel(root, m_barrel5Prefab, "Back Shelf Left Small Barrel", shelfRoot.transform.TransformPoint(new Vector3(-1.9f, 1.08f, -0.03f)), Quaternion.identity, new Vector3(0.07f, 0.07f, 0.07f), m_barrelGrayMaterial, shelfRoot.transform.position.y + 1.08f);
+            SpawnAssetBarrel(root, m_barrel30Prefab, "Back Shelf Left Small Barrel", shelfRoot.transform.TransformPoint(new Vector3(-1.9f, 1.08f, -0.03f)), Quaternion.identity, ShelfSmallBarrelScale, m_barrelGrayMaterial, shelfRoot.transform.position.y + 1.08f);
+            SpawnAssetBarrel(root, m_barrel30Prefab, "Back Shelf Middle Left Black Small Barrel", shelfRoot.transform.TransformPoint(new Vector3(-1.35f, 1.08f, -0.04f)), Quaternion.Euler(0f, 14f, 0f), ShelfSmallBarrelScale, m_barrelBlackMaterial, shelfRoot.transform.position.y + 1.08f);
+            SpawnAssetBarrel(root, m_barrel30Prefab, "Back Shelf Middle Center White Small Barrel", shelfRoot.transform.TransformPoint(new Vector3(-0.62f, 1.08f, -0.04f)), Quaternion.Euler(0f, -10f, 0f), ShelfSmallBarrelScale, m_barrelGrayMaterial, shelfRoot.transform.position.y + 1.08f);
+            SpawnAssetBarrel(root, m_barrel30Prefab, "Back Shelf Middle Center Black Small Barrel", shelfRoot.transform.TransformPoint(new Vector3(0.38f, 1.08f, -0.04f)), Quaternion.Euler(0f, 22f, 0f), ShelfSmallBarrelScale, m_barrelBlackMaterial, shelfRoot.transform.position.y + 1.08f);
+            SpawnAssetBarrel(root, m_barrel30Prefab, "Back Shelf Left Bin Black Small Barrel", shelfRoot.transform.TransformPoint(new Vector3(-1.55f, 0.48f, -0.04f)), Quaternion.Euler(0f, -16f, 0f), ShelfSmallBarrelScale, m_barrelBlackMaterial, shelfRoot.transform.position.y + 0.48f);
+            SpawnAssetBarrel(root, m_barrel30Prefab, "Back Shelf Bottom Far Left White Small Barrel", shelfRoot.transform.TransformPoint(new Vector3(-2.22f, 0.48f, -0.04f)), Quaternion.Euler(0f, 9f, 0f), ShelfSmallBarrelScale, m_barrelGrayMaterial, shelfRoot.transform.position.y + 0.48f);
+            SpawnAssetBarrel(root, m_barrel30Prefab, "Back Shelf Bottom Left White Small Barrel", shelfRoot.transform.TransformPoint(new Vector3(-0.42f, 0.48f, -0.04f)), Quaternion.Euler(0f, 26f, 0f), ShelfSmallBarrelScale, m_barrelGrayMaterial, shelfRoot.transform.position.y + 0.48f);
+            SpawnAssetBarrel(root, m_barrel30Prefab, "Back Shelf Center Bin White Small Barrel", shelfRoot.transform.TransformPoint(new Vector3(0.18f, 0.48f, -0.04f)), Quaternion.Euler(0f, 18f, 0f), ShelfSmallBarrelScale, m_barrelGrayMaterial, shelfRoot.transform.position.y + 0.48f);
+            SpawnAssetBarrel(root, m_barrel30Prefab, "Back Shelf Bottom Center Black Small Barrel", shelfRoot.transform.TransformPoint(new Vector3(1.22f, 0.48f, -0.04f)), Quaternion.Euler(0f, -22f, 0f), ShelfSmallBarrelScale, m_barrelBlackMaterial, shelfRoot.transform.position.y + 0.48f);
+            SpawnAssetBarrel(root, m_barrel30Prefab, "Back Shelf Bottom Far Right White Small Barrel", shelfRoot.transform.TransformPoint(new Vector3(2.22f, 0.48f, -0.04f)), Quaternion.Euler(0f, 12f, 0f), ShelfSmallBarrelScale, m_barrelGrayMaterial, shelfRoot.transform.position.y + 0.48f);
             SpawnAssetBarrel(root, m_barrel30Prefab, "Back Shelf Center Barrel", shelfRoot.transform.TransformPoint(new Vector3(-0.55f, 1.68f, -0.04f)), Quaternion.Euler(0f, 28f, 0f), new Vector3(0.14f, 0.14f, 0.14f), m_barrelBlackMaterial, shelfRoot.transform.position.y + 1.68f);
-            SpawnAssetBarrel(root, m_barrel5Prefab, "Back Shelf Right Small Barrel", shelfRoot.transform.TransformPoint(new Vector3(1.2f, 1.08f, -0.04f)), Quaternion.Euler(0f, -20f, 0f), new Vector3(0.07f, 0.07f, 0.07f), m_barrelGrayMaterial, shelfRoot.transform.position.y + 1.08f);
-            SpawnAssetBarrel(root, m_barrel5Prefab, "Back Shelf Upper Small Barrel", shelfRoot.transform.TransformPoint(new Vector3(2.05f, 1.68f, -0.04f)), Quaternion.Euler(0f, -12f, 0f), new Vector3(0.07f, 0.07f, 0.07f), m_barrelGrayMaterial, shelfRoot.transform.position.y + 1.68f);
+            SpawnAssetBarrel(root, m_barrel30Prefab, "Back Shelf Right Small Barrel", shelfRoot.transform.TransformPoint(new Vector3(1.2f, 1.08f, -0.04f)), Quaternion.Euler(0f, -20f, 0f), ShelfSmallBarrelScale, m_barrelGrayMaterial, shelfRoot.transform.position.y + 1.08f);
+            SpawnAssetBarrel(root, m_barrel30Prefab, "Back Shelf Middle Right White Small Barrel", shelfRoot.transform.TransformPoint(new Vector3(1.72f, 1.08f, -0.04f)), Quaternion.Euler(0f, 18f, 0f), ShelfSmallBarrelScale, m_barrelGrayMaterial, shelfRoot.transform.position.y + 1.08f);
+            SpawnAssetBarrel(root, m_barrel30Prefab, "Back Shelf Right Bin Black Small Barrel", shelfRoot.transform.TransformPoint(new Vector3(2.45f, 1.08f, -0.04f)), Quaternion.Euler(0f, 24f, 0f), ShelfSmallBarrelScale, m_barrelBlackMaterial, shelfRoot.transform.position.y + 1.08f);
+            SpawnAssetBarrel(root, m_barrel30Prefab, "Back Shelf Upper Small Barrel", shelfRoot.transform.TransformPoint(new Vector3(2.05f, 1.68f, -0.04f)), Quaternion.Euler(0f, -12f, 0f), ShelfSmallBarrelScale, m_barrelGrayMaterial, shelfRoot.transform.position.y + 1.68f);
 
             CreateStorageBin(shelfRoot.transform, "Back Shelf Bin A", new Vector3(-1.05f, 0.52f, -0.05f), new Vector3(0.52f, 0.20f, 0.34f));
             CreateStorageBin(shelfRoot.transform, "Back Shelf Bin B", new Vector3(0.78f, 0.52f, -0.05f), new Vector3(0.58f, 0.20f, 0.34f));
@@ -284,9 +281,7 @@ namespace SimJam.Tutorial
             CreateCube(shelfRoot, "Shelf Binder White", new Vector3(-1.90f, 1.13f, -0.11f), new Vector3(0.09f, 0.32f, 0.26f), m_labelMaterial, false);
             CreateCube(shelfRoot, "Sealed Sample Box A", new Vector3(1.56f, 0.55f, -0.04f), new Vector3(0.32f, 0.16f, 0.28f), m_crateMaterial, false);
             CreateCube(shelfRoot, "Sealed Sample Box Label A", new Vector3(1.56f, 0.56f, -0.19f), new Vector3(0.18f, 0.06f, 0.018f), m_labelMaterial, false);
-            CreateCube(shelfRoot, "Flat Glove Box", new Vector3(0.02f, 1.73f, -0.04f), new Vector3(0.48f, 0.12f, 0.30f), m_labelMaterial, false);
-            CreateCylinder(shelfRoot, "Tape Roll", new Vector3(1.72f, 1.72f, -0.04f), new Vector3(0.11f, 0.045f, 0.11f), m_labelMaterial, false, Quaternion.Euler(90f, 0f, 0f));
-            CreateCube(shelfRoot, "Tape Roll Core", new Vector3(1.72f, 1.72f, -0.09f), new Vector3(0.085f, 0.085f, 0.02f), m_darkMetalMaterial, false);
+            CreateCube(shelfRoot, "Flat Glove Box", new Vector3(-1.12f, 1.73f, -0.04f), new Vector3(0.48f, 0.12f, 0.30f), m_labelMaterial, false);
         }
 
         private void BuildClutter(Transform root)
@@ -302,11 +297,6 @@ namespace SimJam.Tutorial
             BuildFloorBarrelCluster(root, "Open Floor Barrel Cluster", new Vector3(-2.25f, 0f, -0.15f), Quaternion.Euler(0f, 32f, 0f), BarrelClusterLayout.OpenFloorCluster);
             BuildFloorBarrelCluster(root, "Spawn Corner Barrel Cluster", new Vector3(2.38f, 0f, -2.55f), Quaternion.Euler(0f, 20f, 0f), BarrelClusterLayout.CornerCluster);
 
-            BuildTrafficCone(root, new Vector3(-0.98f, 0f, -2.95f), "Left Aisle Cone");
-            BuildTrafficCone(root, new Vector3(0.98f, 0f, -2.35f), "Right Aisle Cone");
-            BuildTrafficCone(root, new Vector3(1.15f, 0f, 2.65f), "Back Aisle Cone");
-
-            BuildCableReel(root, new Vector3(-3.15f, 0.28f, 1.68f), Quaternion.Euler(0f, 22f, 90f));
         }
 
         private enum BarrelClusterLayout
@@ -397,7 +387,7 @@ namespace SimJam.Tutorial
         {
             var clock = new GameObject("Spawn Wall Clock");
             clock.transform.SetParent(root, false);
-            clock.transform.localPosition = new Vector3(-0.80f, 2.35f, -3.86f);
+            clock.transform.localPosition = new Vector3(-3.50f, 2f, -3.86f);
             clock.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
 
             CreateCylinder(clock.transform, "Clock Rim", new Vector3(0f, 0.006f, 0f), new Vector3(0.235f, 0.012f, 0.235f), m_darkMetalMaterial, false);
@@ -426,28 +416,6 @@ namespace SimJam.Tutorial
             var bin = CreateCube(parent, objectName, localPosition, localScale, m_crateMaterial, true);
             CreateCube(bin.transform, "Bin Lid", new Vector3(0f, 0.56f, 0f), new Vector3(1.05f, 0.08f, 1.06f), m_darkMetalMaterial, false);
             CreateCube(bin.transform, "Front Label", new Vector3(0f, 0.05f, -0.515f), new Vector3(0.46f, 0.28f, 0.025f), m_labelMaterial, false);
-        }
-
-        private void BuildTrafficCone(Transform parent, Vector3 position, string objectName)
-        {
-            var coneRoot = new GameObject(objectName);
-            coneRoot.transform.SetParent(parent, false);
-            coneRoot.transform.localPosition = position;
-
-            CreateCube(coneRoot.transform, "Cone Base", new Vector3(0f, 0.025f, 0f), new Vector3(0.32f, 0.05f, 0.32f), m_blackMaterial, true);
-            CreateCylinder(coneRoot.transform, "Cone Body", new Vector3(0f, 0.24f, 0f), new Vector3(0.16f, 0.21f, 0.16f), m_orangeMaterial, true);
-            CreateCylinder(coneRoot.transform, "Cone Stripe", new Vector3(0f, 0.31f, 0f), new Vector3(0.165f, 0.018f, 0.165f), m_labelMaterial, false);
-        }
-
-        private void BuildCableReel(Transform parent, Vector3 position, Quaternion rotation)
-        {
-            var reel = new GameObject("Cable Reel");
-            reel.transform.SetParent(parent, false);
-            reel.transform.SetPositionAndRotation(position, rotation);
-
-            CreateCylinder(reel.transform, "Left Flange", new Vector3(-0.12f, 0f, 0f), new Vector3(0.23f, 0.035f, 0.23f), m_darkMetalMaterial, true, Quaternion.Euler(0f, 0f, 90f));
-            CreateCylinder(reel.transform, "Right Flange", new Vector3(0.12f, 0f, 0f), new Vector3(0.23f, 0.035f, 0.23f), m_darkMetalMaterial, true, Quaternion.Euler(0f, 0f, 90f));
-            CreateCylinder(reel.transform, "Cable Core", Vector3.zero, new Vector3(0.16f, 0.14f, 0.16f), m_blackMaterial, true, Quaternion.Euler(0f, 0f, 90f));
         }
 
         private void SpawnBarrel(Transform parent, GameObject prefab, string objectName, Vector3 position, Quaternion rotation, Vector3 scale, float surfaceY)
