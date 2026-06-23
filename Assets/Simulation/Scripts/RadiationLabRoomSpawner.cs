@@ -165,6 +165,8 @@ namespace SimJam.BarrelSimulator
         // Player presses the wall START button to randomize a round, then aims the detector at the
         // barrel they suspect and presses A to submit. They get m_maxTries attempts per round.
         [SerializeField, Min(1)] private int m_maxTries = 2;
+        [SerializeField] private bool m_enableRoundTimer;
+        [SerializeField, Min(10f)] private float m_roundDurationSeconds = 180f;
         [SerializeField, Min(0.04f)] private float m_startButtonPressRadius = 0.1f;
         [SerializeField, Min(0.5f)] private float m_guessRayLength = 12f;
         // Half-angle of the forgiving "aim cone" for submitting a guess: the player only needs to
@@ -283,6 +285,8 @@ namespace SimJam.BarrelSimulator
         // pointing the detector at a barrel. Public hooks below let a designer port in their own UI.
         private SimulationPhase m_phase = SimulationPhase.Waiting;
         private int m_triesUsed;
+        private float m_roundStartTime;
+        private float m_nextTimerStatusTime;
         private GameObject m_startButtonRoot;
         private Transform m_startButtonCap;
         private TextMesh m_startButtonLabel;
@@ -370,6 +374,7 @@ namespace SimJam.BarrelSimulator
             UpdateDoorMotion();
             UpdateHapticPulse();
             UpdateStartButton();
+            UpdateRoundTimer();
 
             // A button (or hand pinch) submits a guess: whatever barrel the detector is aimed at
             // is the player's answer. The A button no longer reshuffles the barrels — only the
@@ -434,12 +439,12 @@ namespace SimJam.BarrelSimulator
 
         public enum SimulationPhase { Waiting, Playing, Resolved }
 
-        public enum GuessOutcome { NoTarget, Incorrect, Correct }
+        public enum GuessOutcome { NoTarget, Incorrect, Correct, TimeExpired }
 
         /// <summary>Fires when a fresh round has been randomized and is ready to play.</summary>
         public event Action OnSimulationStarted;
 
-        /// <summary>Fires after every submitted guess: (outcome, triesUsed, maxTries).</summary>
+        /// <summary>Fires after a submitted guess or timeout: (outcome, triesUsed, maxTries).</summary>
         public event Action<GuessOutcome, int, int> OnGuessResolved;
 
         public SimulationPhase Phase => m_phase;
@@ -450,6 +455,16 @@ namespace SimJam.BarrelSimulator
 
         public int TriesRemaining => Mathf.Max(0, MaxTries - m_triesUsed);
 
+        public float RoundDurationSeconds => Mathf.Max(10f, m_roundDurationSeconds);
+
+        public float RoundElapsedSeconds => m_phase == SimulationPhase.Playing
+            ? Mathf.Max(0f, Time.time - m_roundStartTime)
+            : 0f;
+
+        public float RoundRemainingSeconds => m_enableRoundTimer && m_phase == SimulationPhase.Playing
+            ? Mathf.Max(0f, RoundDurationSeconds - RoundElapsedSeconds)
+            : 0f;
+
         public bool IsRoundActive => m_phase == SimulationPhase.Playing;
 
         /// <summary>Randomize a new round and begin play. Safe to call from any phase.</summary>
@@ -457,10 +472,15 @@ namespace SimJam.BarrelSimulator
         {
             GenerateRun();
             m_triesUsed = 0;
+            m_roundStartTime = Time.time;
+            m_nextTimerStatusTime = Time.time;
             m_phase = SimulationPhase.Playing;
             RefreshStartButtonVisual();
-            SetStatus("Round started — find the hidden radioactive material.");
-            ShowMessage("Find the radioactive\nmaterial", new Color(0.7f, 0.95f, 1f), 3f);
+            SetStatus(m_enableRoundTimer
+                ? $"Round started — {FormatRoundTime(RoundRemainingSeconds)} remaining."
+                : "Round started — inspect the containers.");
+            ShowMessage(m_enableRoundTimer ? "3:00 to inspect\nall containers" : "Inspect all containers",
+                new Color(0.7f, 0.95f, 1f), 3f);
             OnSimulationStarted?.Invoke();
         }
 
@@ -517,6 +537,47 @@ namespace SimJam.BarrelSimulator
             RefreshStartButtonVisual();
             OnGuessResolved?.Invoke(outcome, m_triesUsed, MaxTries);
             return outcome;
+        }
+
+        private void UpdateRoundTimer()
+        {
+            if (!m_enableRoundTimer || m_phase != SimulationPhase.Playing)
+            {
+                return;
+            }
+
+            var remaining = RoundRemainingSeconds;
+            if (remaining <= 0f)
+            {
+                ResolveTimeExpired();
+                return;
+            }
+
+            if (Time.time >= m_nextTimerStatusTime)
+            {
+                SetStatus($"{FormatRoundTime(remaining)} remaining.");
+                m_nextTimerStatusTime = Time.time + 15f;
+            }
+        }
+
+        private void ResolveTimeExpired()
+        {
+            if (m_phase != SimulationPhase.Playing)
+            {
+                return;
+            }
+
+            m_phase = SimulationPhase.Resolved;
+            RefreshStartButtonVisual();
+            ShowMessage("Time expired\nPress START to retry", new Color(1f, 0.45f, 0.2f), 6f);
+            SetStatus("Time expired. Press START for a new round.");
+            OnGuessResolved?.Invoke(GuessOutcome.TimeExpired, m_triesUsed, MaxTries);
+        }
+
+        private static string FormatRoundTime(float seconds)
+        {
+            var clampedSeconds = Mathf.CeilToInt(Mathf.Max(0f, seconds));
+            return $"{clampedSeconds / 60}:{clampedSeconds % 60:00}";
         }
 
         /// <summary>
@@ -854,7 +915,7 @@ namespace SimJam.BarrelSimulator
             RenderSettings.ambientGroundColor = new Color(0.23f, 0.22f, 0.21f);
 
             // Realtime sun shadows add Quest cost and only darken an enclosed interior.
-            foreach (var sceneLight in FindObjectsByType<Light>(FindObjectsSortMode.None))
+            foreach (var sceneLight in FindObjectsByType<Light>())
             {
                 if (sceneLight.type == LightType.Directional)
                 {
@@ -3609,7 +3670,7 @@ namespace SimJam.BarrelSimulator
 
         private Material CreateMaterial(Color color, string materialName, float metallic, float smoothness, Texture2D albedo, Color? emission)
         {
-            var albedoId = albedo != null ? albedo.GetInstanceID() : 0;
+            var albedoId = albedo != null ? EntityId.ToULong(albedo.GetEntityId()) : 0UL;
             var emissionKey = emission.HasValue
                 ? $"{emission.Value.r:0.00}_{emission.Value.g:0.00}_{emission.Value.b:0.00}"
                 : "none";

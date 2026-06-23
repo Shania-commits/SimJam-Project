@@ -339,6 +339,18 @@ namespace SimJam.Tutorial
                 caption = "Use your controller to move through the environment.\n\nWalk to the highlighted marker to continue.",
                 requireCompletionToContinue = true
             });
+            m_steps.Add(new TutorialStep
+            {
+                title = "Tutorial Complete",
+                caption = "You have completed the basic inspection tutorial.\n\nReview the mission briefing before entering the container inspection room.",
+                nextButtonLabel = "Mission Briefing"
+            });
+            m_steps.Add(new TutorialStep
+            {
+                title = "Mission Briefing",
+                caption = "You will have 3 minutes to inspect the containers using the IdentiFINDER detector.\n\nRadiation levels are randomized across each barrel in the room. Compare detector readings across all containers and determine which container exhibits the highest radiation level.",
+                nextButtonLabel = "Begin Mission"
+            });
         }
 
         private void EnsureDefaultUi()
