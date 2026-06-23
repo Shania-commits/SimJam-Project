@@ -40,6 +40,7 @@ namespace SimJam.Tutorial
 
         [Header("Detector")]
         [SerializeField] private bool m_spawnWorkingDetector = true;
+        [SerializeField] private bool m_enableDetectorAudio;
         [SerializeField] private Vector3 m_detectorHomePosition = new Vector3(-2.25f, 0.92f, -2.20f);
         [SerializeField] private Vector3 m_detectorHomeEuler = new Vector3(0f, 98f, 90f);
         [SerializeField, Min(0.05f)] private float m_detectorGrabRadius = 0.18f;
@@ -390,6 +391,7 @@ namespace SimJam.Tutorial
             m_detectorGrabTool.Grabbed += MarkDetectorGrabbed;
 
             var audio = parts.Root.AddComponent<GeigerAudio>();
+            audio.enabled = m_enableDetectorAudio;
             m_detector = parts.Root.AddComponent<RadiationDetector>();
             m_detector.Initialize(m_cameraRig, parts.ScreenText, parts.SensorTip, audio, m_detectorGrabTool, m_detectorHomePosition, Quaternion.Euler(m_detectorHomeEuler));
         }

@@ -45,10 +45,14 @@ namespace SimJam.Tutorial
         [SerializeField] private Button m_pauseButton;
         [SerializeField] private Button m_resumeButton;
 
+        [Header("UI art")]
+        [SerializeField] private Sprite m_defaultCaptionBackgroundSprite;
+        [SerializeField] private Sprite m_buttonSprite;
+
         [Header("VR panel placement")]
         [SerializeField] private bool m_createDefaultUiIfMissing = true;
-        [SerializeField] private bool m_useWorldSpaceCanvas = true;
-        [SerializeField] private bool m_keepPanelInFrontOfCamera;
+        [SerializeField] private bool m_useWorldSpaceCanvas;
+        [SerializeField] private bool m_keepPanelInFrontOfCamera = true;
         [SerializeField, Min(0.5f)] private float m_panelDistance = 2.2f;
         [SerializeField] private float m_panelVerticalOffset;
         [SerializeField] private Vector2 m_panelSize = new Vector2(960f, 540f);
@@ -225,10 +229,12 @@ namespace SimJam.Tutorial
 
             if (m_backgroundImage != null)
             {
-                m_backgroundImage.sprite = step.backgroundImage;
-                m_backgroundImage.color = step.backgroundImage == null
-                    ? new Color(0.03f, 0.035f, 0.035f, 0.86f)
-                    : new Color(1f, 1f, 1f, 0.92f);
+                var backgroundSprite = step.backgroundImage != null ? step.backgroundImage : m_defaultCaptionBackgroundSprite;
+                m_backgroundImage.sprite = backgroundSprite;
+                m_backgroundImage.color = backgroundSprite == null
+                    ? new Color(0.03f, 0.035f, 0.035f, 0.94f)
+                    : Color.white;
+                m_backgroundImage.type = Image.Type.Simple;
             }
 
             step.onStepStarted?.Invoke();
@@ -244,8 +250,10 @@ namespace SimJam.Tutorial
 
             if (m_backButton != null)
             {
-                m_backButton.gameObject.SetActive(m_currentStepIndex > 0);
-                m_backButton.interactable = !m_isPaused && m_currentStepIndex > 0 && m_steps[m_currentStepIndex].canGoBack;
+                var showBackButton = m_steps.Count > 0 && m_currentStepIndex > 0 && m_steps[m_currentStepIndex].canGoBack;
+                m_backButton.gameObject.SetActive(showBackButton);
+                m_backButton.interactable = !m_isPaused && showBackButton;
+                SetNextButtonPlacement(showBackButton);
             }
 
             if (m_nextButton != null)
@@ -259,6 +267,25 @@ namespace SimJam.Tutorial
             {
                 m_pauseButton.interactable = CurrentStepAllowsPause();
             }
+        }
+
+        private void SetNextButtonPlacement(bool hasBackButton)
+        {
+            if (m_nextButton == null)
+            {
+                return;
+            }
+
+            var rectTransform = m_nextButton.GetComponent<RectTransform>();
+            if (rectTransform == null)
+            {
+                return;
+            }
+
+            var anchor = hasBackButton ? new Vector2(1f, 0f) : new Vector2(0.5f, 0f);
+            rectTransform.anchorMin = anchor;
+            rectTransform.anchorMax = anchor;
+            rectTransform.anchoredPosition = hasBackButton ? new Vector2(-150f, 74f) : new Vector2(0f, 74f);
         }
 
         private bool CurrentStepAllowsPause()
@@ -383,7 +410,7 @@ namespace SimJam.Tutorial
             {
                 m_panelRoot = CreateRect(root, "Tutorial Panel", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, m_panelSize);
                 var panelImage = m_panelRoot.gameObject.AddComponent<Image>();
-                panelImage.color = new Color(0.015f, 0.017f, 0.018f, 0.88f);
+                panelImage.color = Color.clear;
                 panelImage.raycastTarget = false;
             }
 
@@ -393,7 +420,7 @@ namespace SimJam.Tutorial
                 background.offsetMin = Vector2.zero;
                 background.offsetMax = Vector2.zero;
                 m_backgroundImage = background.gameObject.AddComponent<Image>();
-                m_backgroundImage.color = new Color(0.03f, 0.035f, 0.035f, 0.86f);
+                m_backgroundImage.color = new Color(0.03f, 0.035f, 0.035f, 0.94f);
                 m_backgroundImage.raycastTarget = false;
             }
 
@@ -414,12 +441,12 @@ namespace SimJam.Tutorial
 
             if (m_backButton == null)
             {
-                m_backButton = CreateButton(m_panelRoot, "Previous Button", "Previous", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-112f, 58f));
+                m_backButton = CreateButton(m_panelRoot, "Previous Button", "Previous", new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(150f, 74f));
             }
 
             if (m_nextButton == null)
             {
-                m_nextButton = CreateButton(m_panelRoot, "Continue Button", "Continue", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(112f, 58f));
+                m_nextButton = CreateButton(m_panelRoot, "Continue Button", "Continue", new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-150f, 74f));
                 m_nextButtonLabelText = m_nextButton.GetComponentInChildren<TMP_Text>();
             }
             else if (m_nextButtonLabelText == null)
@@ -429,7 +456,7 @@ namespace SimJam.Tutorial
 
             if (m_pauseButton == null)
             {
-                m_pauseButton = CreateButton(m_panelRoot, "Pause Button", "Pause", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(84f, -34f));
+                m_pauseButton = CreateButton(m_panelRoot, "Pause Button", "Pause", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(120f, -58f), new Vector2(170f, 54f), 22f);
             }
 
             if (m_pausePanel == null)
@@ -461,7 +488,7 @@ namespace SimJam.Tutorial
                 return;
             }
 
-            if (m_panelFollowTarget == null && Camera.main != null)
+            if ((m_panelFollowTarget == null || !m_panelFollowTarget.gameObject.activeInHierarchy) && Camera.main != null)
             {
                 m_panelFollowTarget = Camera.main.transform;
             }
@@ -507,21 +534,33 @@ namespace SimJam.Tutorial
 
         private Button CreateButton(Transform parent, string objectName, string label, Vector2 anchorMin, Vector2 anchorMax, Vector2 anchoredPosition)
         {
-            var rectTransform = CreateRect(parent, objectName, anchorMin, anchorMax, anchoredPosition, new Vector2(170f, 54f));
+            return CreateButton(parent, objectName, label, anchorMin, anchorMax, anchoredPosition, new Vector2(230f, 72f), 26f);
+        }
+
+        private Button CreateButton(Transform parent, string objectName, string label, Vector2 anchorMin, Vector2 anchorMax, Vector2 anchoredPosition, Vector2 size, float maxFontSize)
+        {
+            var rectTransform = CreateRect(parent, objectName, anchorMin, anchorMax, anchoredPosition, size);
 
             var image = rectTransform.gameObject.AddComponent<Image>();
-            image.color = new Color(0.04f, 0.24f, 0.52f, 0.95f);
+            image.sprite = m_buttonSprite;
+            image.type = Image.Type.Simple;
+            image.color = Color.white;
 
             var button = rectTransform.gameObject.AddComponent<Button>();
             var colors = button.colors;
-            colors.normalColor = new Color(0.04f, 0.24f, 0.52f, 0.95f);
-            colors.highlightedColor = new Color(0.08f, 0.34f, 0.70f, 1f);
-            colors.pressedColor = new Color(0.02f, 0.16f, 0.34f, 1f);
-            colors.disabledColor = new Color(0.06f, 0.07f, 0.08f, 0.35f);
+            colors.normalColor = m_buttonSprite == null ? new Color(0.04f, 0.24f, 0.52f, 0.95f) : Color.white;
+            colors.highlightedColor = m_buttonSprite == null ? new Color(0.08f, 0.34f, 0.70f, 1f) : new Color(0.92f, 0.96f, 1f, 1f);
+            colors.pressedColor = m_buttonSprite == null ? new Color(0.02f, 0.16f, 0.34f, 1f) : new Color(0.78f, 0.84f, 0.90f, 1f);
+            colors.disabledColor = m_buttonSprite == null ? new Color(0.06f, 0.07f, 0.08f, 0.35f) : new Color(0.45f, 0.45f, 0.45f, 0.42f);
             button.colors = colors;
 
             var labelText = CreateText(rectTransform, "Label", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, 20f, TextAlignmentOptions.Center);
             labelText.text = label;
+            labelText.color = m_buttonSprite == null ? Color.white : new Color(0.03f, 0.035f, 0.04f, 1f);
+            labelText.enableAutoSizing = true;
+            labelText.fontSizeMin = 16f;
+            labelText.fontSizeMax = maxFontSize;
+            labelText.margin = new Vector4(24f, 8f, 24f, 8f);
 
             return button;
         }
