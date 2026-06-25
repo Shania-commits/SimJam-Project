@@ -12,6 +12,10 @@ namespace SimJam.Tutorial
         [SerializeField] private GameObject m_barrel30Prefab;
         [SerializeField] private GameObject m_barrel5Prefab;
 
+        [Header("Barrel materials (assign the lab's authored barrel materials; empty = procedural fallback)")]
+        [SerializeField] private Material m_barrelLargeMetal;
+        [SerializeField] private Material m_barrelLargePaint;
+
         [Header("Generation")]
         [SerializeField] private bool m_buildInEditor = true;
         [SerializeField] private bool m_buildAtRuntime = true;
@@ -34,8 +38,10 @@ namespace SimJam.Tutorial
         private Material m_barrelBlackMaterial;
         private Material m_barrelGrayMaterial;
 
-        private static readonly Vector3 FloorBarrel55Scale = new Vector3(0.19567f, 0.285f, 0.19567f);
-        private static readonly Vector3 FloorBarrel30Scale = new Vector3(0.14f, 0.215f, 0.14f);
+        // Match the lab's barrel model scale (RadiationLabRoom m_barrel55/30ModelScale) so tutorial
+        // barrels are the same size as the lab. Only the height (Y) differed — they were too tall.
+        private static readonly Vector3 FloorBarrel55Scale = new Vector3(0.19567f, 0.1853504f, 0.19567f);
+        private static readonly Vector3 FloorBarrel30Scale = new Vector3(0.14f, 0.14f, 0.14f);
         private static readonly Vector3 ShelfSmallBarrelScale = new Vector3(0.12f, 0.12f, 0.12f);
 
         private void Awake()
@@ -145,8 +151,14 @@ namespace SimJam.Tutorial
             m_radiationPosterMaterial = CreateMaterial("Tutorial Radiation Poster", Color.white, 0f, 0.35f, SimJam.BarrelSimulator.ProceduralTextureLibrary.RadiationPoster256);
             m_labelMaterial = CreateMaterial("Tutorial Label Paper", new Color(0.92f, 0.90f, 0.76f), 0f, 0.32f, null);
             m_blueMaterial = CreateMaterial("Tutorial Blue Stencil", new Color(0.05f, 0.36f, 0.58f), 0f, 0.25f, null);
-            m_barrelBlackMaterial = CreateMaterial("Tutorial Black Barrel", new Color(0.12f, 0.13f, 0.13f), 0.25f, 0.35f, null);
-            m_barrelGrayMaterial = CreateMaterial("Tutorial White Barrel", new Color(0.78f, 0.80f, 0.78f), 0.35f, 0.4f, null);
+            // Prefer the lab's authored PBR barrel materials so tutorial barrels match the lab;
+            // fall back to the procedural look only if the material slots are left empty.
+            m_barrelBlackMaterial = m_barrelLargeMetal != null
+                ? m_barrelLargeMetal
+                : CreateMaterial("Tutorial Black Barrel", new Color(0.12f, 0.13f, 0.13f), 0.25f, 0.35f, null);
+            m_barrelGrayMaterial = m_barrelLargePaint != null
+                ? m_barrelLargePaint
+                : CreateMaterial("Tutorial White Barrel", new Color(0.78f, 0.80f, 0.78f), 0.35f, 0.4f, null);
         }
 
         private static Material CreateMaterial(string materialName, Color color, float metallic, float smoothness, Texture2D texture)

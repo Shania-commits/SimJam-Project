@@ -15671,6 +15671,8 @@ MonoBehaviour:
   m_barrel55Prefab: {fileID: 919132149155446097, guid: e6b7b26d2cee53e4da56fa1e9ad5bc18, type: 3}
   m_barrel30Prefab: {fileID: 919132149155446097, guid: f4ebcbc6f188b4444809742d4ca05b6a, type: 3}
   m_barrel5Prefab: {fileID: 919132149155446097, guid: 749cb16eaa3b88c43a766e85bd8abc97, type: 3}
+  m_barrelLargeMetal: {fileID: 2100000, guid: 1525ab43ef6670c40a0524a4c4131904, type: 2}
+  m_barrelLargePaint: {fileID: 2100000, guid: 88bf7787931edf54ab0435612e89afe8, type: 2}
   m_buildInEditor: 1
   m_buildAtRuntime: 1
 --- !u!114 &2140913005
