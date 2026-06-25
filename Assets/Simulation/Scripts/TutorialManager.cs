@@ -113,6 +113,22 @@ namespace SimJam.Tutorial
             {
                 TogglePause();
             }
+
+            // Quest controller advance. The tutorial panel is a world-space canvas with no laser
+            // pointer, so the player advances with the face buttons instead of clicking: A = next
+            // (or "Begin Mission" on the last step), B = back. GoToNextStep already enforces gated-
+            // step completion, so a button press can never skip a step that isn't finished.
+            if (!m_isPaused)
+            {
+                if (OVRInput.GetDown(OVRInput.RawButton.A))
+                {
+                    GoToNextStep();
+                }
+                else if (OVRInput.GetDown(OVRInput.RawButton.B))
+                {
+                    GoToPreviousStep();
+                }
+            }
         }
 
         public void GoToNextStep()
