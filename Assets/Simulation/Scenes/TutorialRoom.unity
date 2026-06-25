@@ -15531,11 +15531,11 @@ MonoBehaviour:
       m_PersistentCalls:
         m_Calls: []
   - title: 'Tutorial: Movement'
-    caption: 'Use your controller to move through the environment.
+    caption: 'Push the LEFT thumbstick to walk through the environment, and push
+      the RIGHT thumbstick left or right to snap-turn.
 
 
-      Walk to
-      the highlighted marker to continue.'
+      Walk to the highlighted marker to continue.'
     backgroundImage: {fileID: 0}
     nextButtonLabel: Continue
     canGoBack: 1
@@ -15548,8 +15548,8 @@ MonoBehaviour:
       m_PersistentCalls:
         m_Calls: []
   - title: 'Tutorial: Teleportation'
-    caption: 'Aim at the floor with your right controller and press the right trigger
-      to teleport.
+    caption: 'Aim at the floor with your RIGHT controller and pull the RIGHT INDEX
+      (front) trigger to teleport.
 
 
       Teleport to continue.'
@@ -15565,11 +15565,11 @@ MonoBehaviour:
       m_PersistentCalls:
         m_Calls: []
   - title: 'Tutorial: Detector Operations'
-    caption: 'Hold the grip button near the IdentiFINDER to pick it up.
+    caption: 'Reach toward the IdentiFINDER and hold the GRIP (hand trigger) on either
+      controller to pick it up.
 
 
-      Point
-      it at a barrel and watch the reading change to continue.'
+      Point it at a barrel until the reading climbs to continue.'
     backgroundImage: {fileID: 0}
     nextButtonLabel: Continue
     canGoBack: 1

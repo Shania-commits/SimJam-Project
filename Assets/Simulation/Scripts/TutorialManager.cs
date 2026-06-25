@@ -420,19 +420,19 @@ namespace SimJam.Tutorial
             m_steps.Add(new TutorialStep
             {
                 title = "Tutorial: Movement",
-                caption = "Use your controller to move through the environment.\n\nWalk to the highlighted marker to continue.",
+                caption = "Push the LEFT thumbstick to walk through the environment, and push the RIGHT thumbstick left or right to snap-turn.\n\nWalk to the highlighted marker to continue.",
                 requireCompletionToContinue = true
             });
             m_steps.Add(new TutorialStep
             {
                 title = "Tutorial: Teleportation",
-                caption = "Aim at the floor with your right controller and press the right trigger to teleport.\n\nTeleport to continue.",
+                caption = "Aim at the floor with your RIGHT controller and pull the RIGHT INDEX (front) trigger to teleport.\n\nTeleport to continue.",
                 requireCompletionToContinue = true
             });
             m_steps.Add(new TutorialStep
             {
                 title = "Tutorial: Detector Operations",
-                caption = "Hold the grip button near the IdentiFINDER to pick it up.\n\nPoint it at a barrel and watch the reading change to continue.",
+                caption = "Reach toward the IdentiFINDER and hold the GRIP (hand trigger) on either controller to pick it up.\n\nPoint it at a barrel until the reading climbs to continue.",
                 requireCompletionToContinue = true
             });
             m_steps.Add(new TutorialStep
