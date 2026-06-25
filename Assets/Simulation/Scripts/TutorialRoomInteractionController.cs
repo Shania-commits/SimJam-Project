@@ -295,6 +295,7 @@ namespace SimJam.Tutorial
             if (WasTeleportPressed() && m_hasValidTeleportTarget)
             {
                 MoveRigTo(m_currentTeleportTarget);
+                TeleportEffects.SpawnArrivalBurst(m_currentTeleportTarget, new Color(0.2f, 1f, 0.4f));
                 m_tutorialManager?.CompleteStepIfCurrent(m_teleportStepIndex);
             }
         }
@@ -441,6 +442,10 @@ namespace SimJam.Tutorial
         {
             var material = new Material(Shader.Find("Standard")) { name = materialName, color = color };
             material.SetFloat("_Glossiness", 0.35f);
+            // Glow so the teleport reticle reads clearly in the headset.
+            material.EnableKeyword("_EMISSION");
+            material.SetColor("_EmissionColor", new Color(color.r, color.g, color.b) * 2.2f);
+            material.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
             return material;
         }
 

@@ -3111,8 +3111,8 @@ namespace SimJam.BarrelSimulator
                 return;
             }
 
-            m_validTeleportMaterial = CreateMaterial(new Color(0.1f, 0.9f, 0.35f, 0.75f), "Valid Teleport");
-            m_invalidTeleportMaterial = CreateMaterial(new Color(0.9f, 0.1f, 0.1f, 0.75f), "Invalid Teleport");
+            m_validTeleportMaterial = CreateMaterial(new Color(0.1f, 0.9f, 0.35f, 0.75f), "Valid Teleport", 0f, 0.5f, null, new Color(0.1f, 0.9f, 0.35f) * 2.2f);
+            m_invalidTeleportMaterial = CreateMaterial(new Color(0.9f, 0.1f, 0.1f, 0.75f), "Invalid Teleport", 0f, 0.5f, null, new Color(0.9f, 0.1f, 0.1f) * 2.2f);
             m_teleportMarker = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             m_teleportMarker.name = "Teleport Target";
             m_teleportMarker.transform.localScale = new Vector3(0.28f, 0.012f, 0.28f);
@@ -3153,6 +3153,7 @@ namespace SimJam.BarrelSimulator
             var clamped = ClampToRoom(worldPosition);
             clamped.y = m_locomotionRoot == m_cameraTransform && m_cameraRig == null ? m_defaultEyeHeight : 0f;
             m_locomotionRoot.position = clamped;
+            TeleportEffects.SpawnArrivalBurst(new Vector3(clamped.x, worldPosition.y, clamped.z), new Color(0.2f, 1f, 0.4f));
         }
 
         // Shared head-locked message panel used for teleport hints AND game-loop results (red
