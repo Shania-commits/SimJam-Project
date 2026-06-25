@@ -1,5 +1,6 @@
 using SimJam.BarrelSimulator;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 #if UNITY_EDITOR && ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
@@ -15,6 +16,7 @@ namespace SimJam.Tutorial
         [SerializeField] private TutorialManager m_tutorialManager;
         [SerializeField, Min(0)] private int m_teleportStepIndex = 4;
         [SerializeField, Min(0)] private int m_detectorStepIndex = 5;
+        [SerializeField] private string m_missionSceneName = "RadiationLabRoom";
 
         [Header("Player")]
         [SerializeField] private OVRCameraRig m_cameraRig;
@@ -62,6 +64,11 @@ namespace SimJam.Tutorial
             if (m_tutorialManager == null)
             {
                 m_tutorialManager = GetComponent<TutorialManager>();
+            }
+
+            if (m_tutorialManager != null)
+            {
+                m_tutorialManager.FinalStepSubmitted += BeginMission;
             }
 
             ResolvePlayerReferences();
@@ -437,6 +444,16 @@ namespace SimJam.Tutorial
             }
         }
 
+        private void BeginMission()
+        {
+            if (string.IsNullOrWhiteSpace(m_missionSceneName))
+            {
+                return;
+            }
+
+            SceneManager.LoadScene(m_missionSceneName);
+        }
+
         private static Material CreateMaterial(string materialName, Color color)
         {
             var material = new Material(Shader.Find("Standard")) { name = materialName, color = color };
@@ -446,6 +463,11 @@ namespace SimJam.Tutorial
 
         private void OnDestroy()
         {
+            if (m_tutorialManager != null)
+            {
+                m_tutorialManager.FinalStepSubmitted -= BeginMission;
+            }
+
             if (m_detectorGrabTool != null)
             {
                 m_detectorGrabTool.Grabbed -= MarkDetectorGrabbed;

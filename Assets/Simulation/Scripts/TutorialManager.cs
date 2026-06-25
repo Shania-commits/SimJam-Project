@@ -69,6 +69,7 @@ namespace SimJam.Tutorial
 
         public int CurrentStepIndex => m_currentStepIndex;
         public bool IsPaused => m_isPaused;
+        public event Action FinalStepSubmitted;
 
         public bool IsCurrentStep(int stepIndex)
         {
@@ -110,7 +111,7 @@ namespace SimJam.Tutorial
 
         public void GoToNextStep()
         {
-            if (m_steps.Count == 0 || m_currentStepIndex >= m_steps.Count - 1)
+            if (m_steps.Count == 0)
             {
                 return;
             }
@@ -118,6 +119,15 @@ namespace SimJam.Tutorial
             var currentStep = m_steps[m_currentStepIndex];
             if (currentStep.requireCompletionToContinue && !m_currentStepComplete)
             {
+                return;
+            }
+
+            if (m_currentStepIndex >= m_steps.Count - 1)
+            {
+                m_currentStepComplete = true;
+                currentStep.onStepCompleted?.Invoke();
+                FinalStepSubmitted?.Invoke();
+                RefreshControls();
                 return;
             }
 
@@ -258,9 +268,8 @@ namespace SimJam.Tutorial
 
             if (m_nextButton != null)
             {
-                var isLastStep = m_currentStepIndex >= m_steps.Count - 1;
                 var isLocked = m_steps.Count > 0 && m_steps[m_currentStepIndex].requireCompletionToContinue && !m_currentStepComplete;
-                m_nextButton.interactable = !m_isPaused && !isLastStep && !isLocked;
+                m_nextButton.interactable = !m_isPaused && !isLocked;
             }
 
             if (m_pauseButton != null)
