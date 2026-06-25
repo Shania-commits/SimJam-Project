@@ -191,6 +191,7 @@ namespace SimJam.BarrelSimulator
         // Mission Briefing promises the player "3 minutes", so this defaults on for the lab scene.
         [SerializeField] private bool m_enableRoundTimer = true;
         [SerializeField, Min(10f)] private float m_roundDurationSeconds = 180f;
+        [SerializeField, Min(0f)] private float m_transitionFadeSeconds = 0.6f;
         [SerializeField, Min(0.04f)] private float m_startButtonPressRadius = 0.1f;
         [SerializeField, Min(0.5f)] private float m_guessRayLength = 12f;
         // Half-angle of the forgiving "aim cone" for submitting a guess: the player only needs to
@@ -368,6 +369,7 @@ namespace SimJam.BarrelSimulator
         private void Start()
         {
             ConfigureAmbientLighting();
+            EnsureScreenFade();
 
             if (m_buildRoomGeometry)
             {
@@ -831,6 +833,26 @@ namespace SimJam.BarrelSimulator
             }
 
             m_hotSource = null;
+        }
+
+        private void EnsureScreenFade()
+        {
+            // Fade up from black when the lab loads (pairs with the tutorial's fade-out). OVRScreenFade
+            // renders a world-space quad on the camera, so it shows correctly in the HMD.
+            if (OVRScreenFade.instance != null)
+            {
+                return;
+            }
+
+            var cam = Camera.main;
+            if (cam == null)
+            {
+                return;
+            }
+
+            var fade = cam.gameObject.AddComponent<OVRScreenFade>();
+            fade.fadeOnStart = true;
+            fade.fadeTime = m_transitionFadeSeconds;
         }
 
         private Transform EnsureCameraRig()

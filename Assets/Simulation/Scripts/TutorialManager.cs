@@ -67,6 +67,7 @@ namespace SimJam.Tutorial
         // Build Settings (File > Build Settings) for LoadScene-by-name to work.
         [SerializeField] private bool m_loadMissionSceneOnFinish = true;
         [SerializeField] private string m_missionSceneName = "RadiationLabRoom";
+        [SerializeField, Min(0f)] private float m_transitionFadeSeconds = 0.6f;
 
         private int m_currentStepIndex;
         private bool m_currentStepComplete;
@@ -175,6 +176,29 @@ namespace SimJam.Tutorial
             if (m_pauseWithTimeScale)
             {
                 Time.timeScale = 1f;
+            }
+
+            StartCoroutine(FadeOutAndLoadMission());
+        }
+
+        private System.Collections.IEnumerator FadeOutAndLoadMission()
+        {
+            // VR-correct fade: OVRScreenFade builds a world-space quad on the camera, so it renders
+            // in the HMD (a ScreenSpaceOverlay fade would not). Fade to black, then load the mission.
+            var fade = OVRScreenFade.instance;
+            if (fade == null && Camera.main != null)
+            {
+                fade = Camera.main.gameObject.AddComponent<OVRScreenFade>();
+                fade.fadeOnStart = false;
+                // Wait one frame so the new component's Start() builds its fade mesh/material.
+                yield return null;
+            }
+
+            if (fade != null)
+            {
+                fade.fadeTime = m_transitionFadeSeconds;
+                fade.FadeOut();
+                yield return new WaitForSecondsRealtime(m_transitionFadeSeconds);
             }
 
             SceneManager.LoadScene(m_missionSceneName);
