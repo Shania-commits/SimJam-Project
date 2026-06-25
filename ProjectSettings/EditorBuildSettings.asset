@@ -6,6 +6,9 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
+    path: Assets/Simulation/Scenes/TutorialRoom.unity
+    guid: a324fcdfbef8e418f92b7e55d1d5fc0a
+  - enabled: 1
     path: Assets/Simulation/Scenes/RadiationLabRoom.unity
     guid: 4a7c2e9b1f8d35a6c4b3a2918d7e6f54
   - enabled: 1

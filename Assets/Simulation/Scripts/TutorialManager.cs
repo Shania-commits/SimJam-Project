@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 #if ENABLE_INPUT_SYSTEM
@@ -61,6 +62,12 @@ namespace SimJam.Tutorial
         [Header("Runtime controls")]
         [SerializeField] private bool m_pauseWithTimeScale = true;
 
+        [Header("Mission hand-off")]
+        // On the final step ("Begin Mission"), load the main game scene. The scene must be in
+        // Build Settings (File > Build Settings) for LoadScene-by-name to work.
+        [SerializeField] private bool m_loadMissionSceneOnFinish = true;
+        [SerializeField] private string m_missionSceneName = "RadiationLabRoom";
+
         private int m_currentStepIndex;
         private bool m_currentStepComplete;
         private bool m_isPaused;
@@ -110,7 +117,7 @@ namespace SimJam.Tutorial
 
         public void GoToNextStep()
         {
-            if (m_steps.Count == 0 || m_currentStepIndex >= m_steps.Count - 1)
+            if (m_steps.Count == 0)
             {
                 return;
             }
@@ -121,8 +128,40 @@ namespace SimJam.Tutorial
                 return;
             }
 
+            // On the last step the "next" button becomes "Begin Mission": hand off to the game.
+            if (m_currentStepIndex >= m_steps.Count - 1)
+            {
+                FinishTutorial();
+                return;
+            }
+
             m_currentStepIndex++;
             ShowCurrentStep();
+        }
+
+        /// <summary>
+        /// Completes the tutorial and (optionally) loads the main mission scene. Wired to the
+        /// final step's "Begin Mission" button via GoToNextStep.
+        /// </summary>
+        public void FinishTutorial()
+        {
+            if (m_steps.Count > 0)
+            {
+                m_steps[m_currentStepIndex].onStepCompleted?.Invoke();
+            }
+
+            if (!m_loadMissionSceneOnFinish || string.IsNullOrWhiteSpace(m_missionSceneName))
+            {
+                return;
+            }
+
+            // Make sure a paused timescale doesn't carry into the loaded scene.
+            if (m_pauseWithTimeScale)
+            {
+                Time.timeScale = 1f;
+            }
+
+            SceneManager.LoadScene(m_missionSceneName);
         }
 
         public void GoToPreviousStep()
@@ -260,7 +299,9 @@ namespace SimJam.Tutorial
             {
                 var isLastStep = m_currentStepIndex >= m_steps.Count - 1;
                 var isLocked = m_steps.Count > 0 && m_steps[m_currentStepIndex].requireCompletionToContinue && !m_currentStepComplete;
-                m_nextButton.interactable = !m_isPaused && !isLastStep && !isLocked;
+                // The last step stays interactable when it hands off to the mission ("Begin Mission").
+                var lastStepFinishes = isLastStep && m_loadMissionSceneOnFinish;
+                m_nextButton.interactable = !m_isPaused && !isLocked && (!isLastStep || lastStepFinishes);
             }
 
             if (m_pauseButton != null)

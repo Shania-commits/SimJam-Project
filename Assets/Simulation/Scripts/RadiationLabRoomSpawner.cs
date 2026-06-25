@@ -187,6 +187,10 @@ namespace SimJam.BarrelSimulator
         // Player presses the wall START button to randomize a round, then aims the detector at the
         // barrel they suspect and presses A to submit. They get m_maxTries attempts per round.
         [SerializeField, Min(1)] private int m_maxTries = 2;
+        // When enabled, a round auto-resolves as a loss after m_roundDurationSeconds. The tutorial's
+        // Mission Briefing promises the player "3 minutes", so this defaults on for the lab scene.
+        [SerializeField] private bool m_enableRoundTimer = true;
+        [SerializeField, Min(10f)] private float m_roundDurationSeconds = 180f;
         [SerializeField, Min(0.04f)] private float m_startButtonPressRadius = 0.1f;
         [SerializeField, Min(0.5f)] private float m_guessRayLength = 12f;
         // Half-angle of the forgiving "aim cone" for submitting a guess: the player only needs to
@@ -305,6 +309,8 @@ namespace SimJam.BarrelSimulator
         // pointing the detector at a barrel. Public hooks below let a designer port in their own UI.
         private SimulationPhase m_phase = SimulationPhase.Waiting;
         private int m_triesUsed;
+        private float m_roundStartTime;
+        private float m_nextTimerStatusTime;
         private GameObject m_startButtonRoot;
         private Transform m_startButtonCap;
         private TextMesh m_startButtonLabel;
@@ -392,6 +398,7 @@ namespace SimJam.BarrelSimulator
             UpdateDoorMotion();
             UpdateHapticPulse();
             UpdateStartButton();
+            UpdateRoundTimer();
 
             // A button (or hand pinch) submits a guess: whatever barrel the detector is aimed at
             // is the player's answer. The A button no longer reshuffles the barrels — only the
@@ -456,7 +463,7 @@ namespace SimJam.BarrelSimulator
 
         public enum SimulationPhase { Waiting, Playing, Resolved }
 
-        public enum GuessOutcome { NoTarget, Incorrect, Correct }
+        public enum GuessOutcome { NoTarget, Incorrect, Correct, TimeExpired }
 
         /// <summary>Fires when a fresh round has been randomized and is ready to play.</summary>
         public event Action OnSimulationStarted;
@@ -472,6 +479,16 @@ namespace SimJam.BarrelSimulator
 
         public int TriesRemaining => Mathf.Max(0, MaxTries - m_triesUsed);
 
+        public float RoundDurationSeconds => Mathf.Max(10f, m_roundDurationSeconds);
+
+        public float RoundElapsedSeconds => m_phase == SimulationPhase.Playing
+            ? Mathf.Max(0f, Time.time - m_roundStartTime)
+            : 0f;
+
+        public float RoundRemainingSeconds => m_enableRoundTimer && m_phase == SimulationPhase.Playing
+            ? Mathf.Max(0f, RoundDurationSeconds - RoundElapsedSeconds)
+            : 0f;
+
         public bool IsRoundActive => m_phase == SimulationPhase.Playing;
 
         /// <summary>Randomize a new round and begin play. Safe to call from any phase.</summary>
@@ -479,10 +496,16 @@ namespace SimJam.BarrelSimulator
         {
             GenerateRun();
             m_triesUsed = 0;
+            m_roundStartTime = Time.time;
+            m_nextTimerStatusTime = Time.time;
             m_phase = SimulationPhase.Playing;
             RefreshStartButtonVisual();
-            SetStatus("Round started — find the hidden radioactive material.");
-            ShowMessage("Find the radioactive\nmaterial", new Color(0.7f, 0.95f, 1f), 3f);
+            SetStatus(m_enableRoundTimer
+                ? $"Round started — {FormatRoundTime(RoundRemainingSeconds)} to find the hidden material."
+                : "Round started — find the hidden radioactive material.");
+            ShowMessage(m_enableRoundTimer
+                ? $"Find the radioactive material\n{FormatRoundTime(RoundRemainingSeconds)} on the clock"
+                : "Find the radioactive\nmaterial", new Color(0.7f, 0.95f, 1f), 3f);
             OnSimulationStarted?.Invoke();
         }
 
@@ -539,6 +562,47 @@ namespace SimJam.BarrelSimulator
             RefreshStartButtonVisual();
             OnGuessResolved?.Invoke(outcome, m_triesUsed, MaxTries);
             return outcome;
+        }
+
+        private void UpdateRoundTimer()
+        {
+            if (!m_enableRoundTimer || m_phase != SimulationPhase.Playing)
+            {
+                return;
+            }
+
+            var remaining = RoundRemainingSeconds;
+            if (remaining <= 0f)
+            {
+                ResolveTimeExpired();
+                return;
+            }
+
+            if (Time.time >= m_nextTimerStatusTime)
+            {
+                SetStatus($"{FormatRoundTime(remaining)} remaining.");
+                m_nextTimerStatusTime = Time.time + 15f;
+            }
+        }
+
+        private void ResolveTimeExpired()
+        {
+            if (m_phase != SimulationPhase.Playing)
+            {
+                return;
+            }
+
+            m_phase = SimulationPhase.Resolved;
+            RefreshStartButtonVisual();
+            ShowMessage("Time expired\nPress START to retry", new Color(1f, 0.45f, 0.2f), 6f);
+            SetStatus("Time expired. Press START for a new round.");
+            OnGuessResolved?.Invoke(GuessOutcome.TimeExpired, m_triesUsed, MaxTries);
+        }
+
+        private static string FormatRoundTime(float seconds)
+        {
+            var clampedSeconds = Mathf.CeilToInt(Mathf.Max(0f, seconds));
+            return $"{clampedSeconds / 60}:{clampedSeconds % 60:00}";
         }
 
         /// <summary>
