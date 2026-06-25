@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace SimJam.BarrelSimulator
@@ -15,13 +16,23 @@ namespace SimJam.BarrelSimulator
     public class MixamoArmRig : MonoBehaviour
     {
         // Tunables — sensible defaults; expose-and-nudge on-device. 0 = left, 1 = right.
-        public Vector3 ChestOffsetFromHead = new Vector3(0f, -0.13f, -0.05f);
+        // The rig is auto-scaled at init so its shoulder->wrist reach == TargetArmReach, which fixes a
+        // mis-scaled FBX (the cause of an always-straight elbow: when reach < shoulder->controller
+        // distance the cos-law solver pins the elbow to full extension). MaxReachFraction is a small
+        // minimum-bend floor so a fully-stretched arm still reads slightly bent, never locked.
+        public float TargetArmReach = 0.58f;
+        [Range(0.85f, 0.999f)] public float MaxReachFraction = 0.97f;
+        public Vector3 ChestOffsetFromHead = new Vector3(0f, -0.16f, -0.05f);
         public Vector3 WristTargetLocalOffset = new Vector3(0f, -0.01f, -0.045f);
         public Vector3 ElbowPoleLocal = new Vector3(0.3f, -0.4f, -0.1f); // x mirrored per side, chest-yaw space
         public float BodyYawOffsetDegrees;                                // set 180 if the body faces backward
-        public bool MatchHandToController;                                // off => hand follows the forearm
-        public Vector3 HandEulerOffsetRight = Vector3.zero;               // applied to controller rotation when matching
-        public Vector3 HandEulerOffsetLeft = Vector3.zero;
+        // Hand twist: auto-calibrated at runtime so the wrist follows the controller without a
+        // hand-authored offset (we capture the hand's orientation relative to the controller once).
+        public bool MatchHandToController = true;
+        // Fingers curl from rest toward a closed fist as the grip trigger is squeezed. The curl axis
+        // is the per-finger-bone local bend axis — Mixamo's varies, so it is tunable if curl looks off.
+        [Range(0f, 130f)] public float FingerCurlAngle = 70f;
+        public Vector3 FingerCurlAxis = new Vector3(0f, 0f, 1f);
 
         private OVRCameraRig m_rig;
         private Transform m_modelRoot;
@@ -35,6 +46,10 @@ namespace SimJam.BarrelSimulator
         private readonly float[] m_foreLen = new float[2];
         private readonly Vector3[] m_upperRestAxis = new Vector3[2];
         private readonly Vector3[] m_foreRestAxis = new Vector3[2];
+        private readonly Quaternion[] m_handOffset = new Quaternion[2];
+        private readonly bool[] m_handCalibrated = new bool[2];
+        private readonly Transform[][] m_fingerBones = new Transform[2][];
+        private readonly Quaternion[][] m_fingerRest = new Quaternion[2][];
         private bool m_ready;
 
         public bool IsReady => m_ready;
@@ -54,8 +69,7 @@ namespace SimJam.BarrelSimulator
                           ?? m_modelRoot;
             }
 
-            m_chestLocalInRoot = m_modelRoot.InverseTransformPoint(m_chest.position);
-
+            // Find the arm bones first (needed to measure reach before recording lengths).
             var ok = true;
             for (var i = 0; i < 2; i++)
             {
@@ -63,21 +77,52 @@ namespace SimJam.BarrelSimulator
                 m_upperArm[i] = FindDeep(m_modelRoot, prefix + "Arm");
                 m_foreArm[i] = FindDeep(m_modelRoot, prefix + "ForeArm");
                 m_hand[i] = FindDeep(m_modelRoot, prefix + "Hand");
-
                 if (m_upperArm[i] == null || m_foreArm[i] == null || m_hand[i] == null)
                 {
                     ok = false;
-                    continue;
                 }
-
-                m_upperLen[i] = Vector3.Distance(m_upperArm[i].position, m_foreArm[i].position);
-                m_foreLen[i] = Vector3.Distance(m_foreArm[i].position, m_hand[i].position);
-                // Rest-pose local direction from each bone toward its child (axis-agnostic).
-                m_upperRestAxis[i] = m_upperArm[i].InverseTransformPoint(m_foreArm[i].position).normalized;
-                m_foreRestAxis[i] = m_foreArm[i].InverseTransformPoint(m_hand[i].position).normalized;
             }
 
-            if (!ok)
+            // Auto-scale the whole rig so its arm reach == TargetArmReach. This corrects a mis-scaled
+            // FBX (e.g. a Blender export in cm), which is what makes the elbow permanently straight.
+            // Must happen BEFORE we record bone lengths (recorded from world-space distances below).
+            if (ok)
+            {
+                var rawReach = Vector3.Distance(m_upperArm[1].position, m_foreArm[1].position)
+                               + Vector3.Distance(m_foreArm[1].position, m_hand[1].position);
+                if (rawReach > 1e-6f)
+                {
+                    m_modelRoot.localScale *= Mathf.Clamp(TargetArmReach / rawReach, 1e-4f, 10000f);
+                }
+
+                Debug.Log($"MixamoArmRig: raw arm reach {rawReach:F4} m -> scaled to ~{TargetArmReach:F2} m " +
+                          $"(root scale {m_modelRoot.localScale.x:F4})");
+            }
+
+            m_chestLocalInRoot = m_modelRoot.InverseTransformPoint(m_chest.position);
+
+            if (ok)
+            {
+                for (var i = 0; i < 2; i++)
+                {
+                    m_upperLen[i] = Vector3.Distance(m_upperArm[i].position, m_foreArm[i].position);
+                    m_foreLen[i] = Vector3.Distance(m_foreArm[i].position, m_hand[i].position);
+                    // Rest-pose local direction from each bone toward its child (axis-agnostic).
+                    m_upperRestAxis[i] = m_upperArm[i].InverseTransformPoint(m_foreArm[i].position).normalized;
+                    m_foreRestAxis[i] = m_foreArm[i].InverseTransformPoint(m_hand[i].position).normalized;
+
+                    // All finger joints (everything under the Hand bone) + their rest rotations, for curl.
+                    var fingers = new List<Transform>();
+                    CollectDescendants(m_hand[i], fingers);
+                    m_fingerBones[i] = fingers.ToArray();
+                    m_fingerRest[i] = new Quaternion[fingers.Count];
+                    for (var f = 0; f < fingers.Count; f++)
+                    {
+                        m_fingerRest[i][f] = fingers[f].localRotation;
+                    }
+                }
+            }
+            else
             {
                 Debug.LogWarning("MixamoArmRig: could not find expected mixamorig arm bones; IK disabled.");
             }
@@ -129,7 +174,7 @@ namespace SimJam.BarrelSimulator
             var l2 = m_foreLen[i];
 
             var toTarget = target - shoulder;
-            var dist = Mathf.Clamp(toTarget.magnitude, Mathf.Abs(l1 - l2) + 1e-4f, (l1 + l2) * 0.999f);
+            var dist = Mathf.Clamp(toTarget.magnitude, Mathf.Abs(l1 - l2) + 1e-4f, (l1 + l2) * MaxReachFraction);
             if (dist < 1e-4f)
             {
                 return;
@@ -160,10 +205,52 @@ namespace SimJam.BarrelSimulator
             AimBoneAxis(m_upperArm[i], m_upperRestAxis[i], elbowPos - m_upperArm[i].position);
             AimBoneAxis(m_foreArm[i], m_foreRestAxis[i], target - m_foreArm[i].position);
 
+            // Wrist: lock the hand's orientation to the controller (twists with your real wrist). The
+            // offset is captured once from the hand's natural rest-following pose, so no hand-authored
+            // angle is needed; if off => the hand just keeps following the forearm.
             if (MatchHandToController && m_hand[i] != null)
             {
-                var offset = i == 0 ? HandEulerOffsetLeft : HandEulerOffsetRight;
-                m_hand[i].rotation = anchor.rotation * Quaternion.Euler(offset);
+                if (!m_handCalibrated[i])
+                {
+                    m_handOffset[i] = Quaternion.Inverse(anchor.rotation) * m_hand[i].rotation;
+                    m_handCalibrated[i] = true;
+                }
+
+                m_hand[i].rotation = anchor.rotation * m_handOffset[i];
+            }
+
+            CurlFingers(i);
+        }
+
+        // Curls every finger joint from its rest pose toward a fist, proportional to the grip trigger,
+        // so squeezing to grab visibly closes the hand.
+        private void CurlFingers(int i)
+        {
+            var bones = m_fingerBones[i];
+            if (bones == null || bones.Length == 0)
+            {
+                return;
+            }
+
+            var grip = OVRInput.Get(i == 0 ? OVRInput.RawAxis1D.LHandTrigger : OVRInput.RawAxis1D.RHandTrigger);
+            var curl = Quaternion.AngleAxis(Mathf.Clamp01(grip) * FingerCurlAngle, FingerCurlAxis);
+            var rest = m_fingerRest[i];
+            for (var f = 0; f < bones.Length; f++)
+            {
+                if (bones[f] != null)
+                {
+                    bones[f].localRotation = rest[f] * curl;
+                }
+            }
+        }
+
+        private static void CollectDescendants(Transform parent, List<Transform> into)
+        {
+            for (var i = 0; i < parent.childCount; i++)
+            {
+                var child = parent.GetChild(i);
+                into.Add(child);
+                CollectDescendants(child, into);
             }
         }
 

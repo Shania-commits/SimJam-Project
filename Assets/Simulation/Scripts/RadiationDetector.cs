@@ -114,7 +114,10 @@ namespace SimJam.BarrelSimulator
             m_stringBuilder.Append('|', filled);
             m_stringBuilder.Append('.', 10 - filled);
 
-            m_screenText.text = m_stringBuilder.ToString();
+            if (m_screenText != null)
+            {
+                m_screenText.text = m_stringBuilder.ToString();
+            }
         }
 
         private void UpdateHaptics()

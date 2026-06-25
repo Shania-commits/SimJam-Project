@@ -141,10 +141,13 @@ namespace SimJam.BarrelSimulator
         // facing if the model imports backward (try 180), and the hand options match the wrist to
         // the controller (off => the hand simply follows the forearm).
         [SerializeField] private GameObject m_customArmsPrefab;
-        [SerializeField] private Vector3 m_customArmsChestOffset = new Vector3(0f, -0.13f, -0.05f);
+        [SerializeField] private Vector3 m_customArmsChestOffset = new Vector3(0f, -0.16f, -0.05f);
         [SerializeField, Range(-180f, 180f)] private float m_customArmsBodyYawOffset;
-        [SerializeField] private bool m_customArmsMatchHandToController;
-        [SerializeField] private Vector3 m_customArmsHandEulerOffset;
+        // The arm rig is auto-scaled so its shoulder->wrist reach equals this (metres). Fixes a
+        // mis-scaled FBX so the elbow can actually bend; raise it if the elbow still won't bend.
+        [SerializeField, Min(0.2f)] private float m_customArmsTargetReach = 0.58f;
+        [SerializeField, Range(0f, 130f)] private float m_customArmsFingerCurlAngle = 70f;
+        [SerializeField] private Vector3 m_customArmsFingerCurlAxis = new Vector3(0f, 0f, 1f);
 
         [Header("Barrel prefabs")]
         [SerializeField] private BarrelPrefabSet m_barrelPrefabs;
@@ -152,6 +155,17 @@ namespace SimJam.BarrelSimulator
         [SerializeField] private Vector3 m_barrel55ModelScale = new Vector3(0.19567f, 0.1853504f, 0.19567f);
         [SerializeField] private Vector3 m_barrel30ModelScale = new Vector3(0.14f, 0.14f, 0.14f);
         [SerializeField] private Vector3 m_barrel5ModelScale = new Vector3(0.07f, 0.07f, 0.07f);
+        // Colleague's authored PBR barrel materials (Standard shader, textures with labels baked in).
+        // 55-gal + 30-gal share one Metal/Paint group; the 5-gal has its own. When assigned, each
+        // barrel randomly gets the Metal or Paint variant for its size, replacing the procedural
+        // tinting. Leave null to keep the procedural tints. The hot barrel looks identical (no tell).
+        [SerializeField] private Material m_barrelLargeMetal;   // 55 + 30 gal
+        [SerializeField] private Material m_barrelLargePaint;
+        [SerializeField] private Material m_barrelSmallMetal;   // 5 gal
+        [SerializeField] private Material m_barrelSmallPaint;
+        // The procedural curved "55/30/5 GAL" size sticker. Her BaseColor textures carry the paint
+        // look but no size text, so keep it on by default; turn off if her textures ever add labels.
+        [SerializeField] private bool m_showBarrelSizeStickers = true;
 
         [Header("Hidden radiation source")]
         [SerializeField, Min(1f)] private float m_minSourceActivityCps = 1500f;
@@ -160,6 +174,14 @@ namespace SimJam.BarrelSimulator
         [Header("Detector")]
         [SerializeField, Min(0.05f)] private float m_detectorGrabRadius = 0.18f;
         [SerializeField] private Vector3 m_pedestalOffsetFromSpawnCenter = new Vector3(1.1f, 0f, 0.45f);
+        // Assign the colleague's identifinderPrefab (combined model + TMP/slider screen) to use the
+        // real detector instead of the procedural wand. Null => procedural DetectorModelBuilder. The
+        // model is auto-scaled to m_detectorTargetHeight and re-centered (its prefab pivot is offset),
+        // so import scale doesn't matter. Held pose is tunable on-device.
+        [SerializeField] private GameObject m_detectorPrefab;
+        [SerializeField, Min(0.05f)] private float m_detectorTargetHeight = 0.25f;
+        [SerializeField] private Vector3 m_detectorHeldLocalPosition = new Vector3(0f, 0.040f, 0.065f);
+        [SerializeField] private Vector3 m_detectorHeldLocalEuler = new Vector3(55f, 0f, 0f);
 
         [Header("Game loop")]
         // Player presses the wall START button to randomize a round, then aims the detector at the
@@ -952,9 +974,9 @@ namespace SimJam.BarrelSimulator
             m_customArmRig = m_customArmsInstance.AddComponent<MixamoArmRig>();
             m_customArmRig.ChestOffsetFromHead = m_customArmsChestOffset;
             m_customArmRig.BodyYawOffsetDegrees = m_customArmsBodyYawOffset;
-            m_customArmRig.MatchHandToController = m_customArmsMatchHandToController;
-            m_customArmRig.HandEulerOffsetLeft = m_customArmsHandEulerOffset;
-            m_customArmRig.HandEulerOffsetRight = m_customArmsHandEulerOffset;
+            m_customArmRig.TargetArmReach = m_customArmsTargetReach;
+            m_customArmRig.FingerCurlAngle = m_customArmsFingerCurlAngle;
+            m_customArmRig.FingerCurlAxis = m_customArmsFingerCurlAxis;
             m_customArmRig.Initialize(m_cameraRig, m_customArmsInstance);
         }
 
@@ -978,22 +1000,126 @@ namespace SimJam.BarrelSimulator
             m_hasPedestal = true;
             RestorePersistentObstacles();
 
-            // Detector collider bottom sits 0.115 below its root; rest it just above the cap.
-            m_detectorHomePosition = pedestalPosition + new Vector3(0f, RoomDecorator.PedestalTopHeight + 0.117f, 0f);
             m_detectorHomeRotation = Quaternion.identity;
 
-            var parts = DetectorModelBuilder.Build();
-            m_detectorRoot = parts.Root;
-            m_detectorSensorTip = parts.SensorTip;
+            // Build the model: the colleague's identiFINDER prefab if assigned, else the procedural
+            // wand. Both converge on the same GrabbableTool + GeigerAudio + RadiationDetector wiring.
+            TextMesh legacyScreen;
+            GameObject screenSource;
+            float colliderBottomOffset;
+            if (m_detectorPrefab != null)
+            {
+                BuildCustomDetectorModel(out m_detectorRoot, out m_detectorSensorTip, out colliderBottomOffset, out screenSource);
+                legacyScreen = null;
+            }
+            else
+            {
+                var parts = DetectorModelBuilder.Build();
+                m_detectorRoot = parts.Root;
+                m_detectorSensorTip = parts.SensorTip;
+                legacyScreen = parts.ScreenText;
+                screenSource = null;
+                colliderBottomOffset = 0.117f; // procedural collider bottom sits ~0.115 below the root
+            }
+
+            m_detectorHomePosition = pedestalPosition + new Vector3(0f, RoomDecorator.PedestalTopHeight + colliderBottomOffset, 0f);
             m_detectorRoot.transform.SetPositionAndRotation(m_detectorHomePosition, m_detectorHomeRotation);
 
             m_detectorGrabTool = m_detectorRoot.AddComponent<GrabbableTool>();
             m_detectorGrabTool.Initialize(m_cameraRig, m_detectorGrabRadius);
+            m_detectorGrabTool.HeldLocalPosition = m_detectorHeldLocalPosition;
+            m_detectorGrabTool.HeldLocalEuler = m_detectorHeldLocalEuler;
 
             var geigerAudio = m_detectorRoot.AddComponent<GeigerAudio>();
             var detector = m_detectorRoot.AddComponent<RadiationDetector>();
-            detector.Initialize(m_cameraRig, parts.ScreenText, parts.SensorTip, geigerAudio, m_detectorGrabTool,
+            detector.Initialize(m_cameraRig, legacyScreen, m_detectorSensorTip, geigerAudio, m_detectorGrabTool,
                 m_detectorHomePosition, m_detectorHomeRotation);
+
+            // Drive the colleague's TMP number + slider from the live reading (both move together).
+            if (screenSource != null)
+            {
+                m_detectorRoot.AddComponent<DetectorScreenBinder>().Bind(detector, screenSource);
+            }
+        }
+
+        // Builds a grabbable detector from the colleague's identiFINDER prefab (combined model +
+        // world-space screen). The prefab's pivot is offset ~300 units from the mesh, so we adopt it
+        // under a clean root, auto-scale it to m_detectorTargetHeight (import scale is unknown), and
+        // re-centre the mesh on the root. Root local +Y is the wand aim axis (sensor tip at the top).
+        private void BuildCustomDetectorModel(out GameObject root, out Transform sensorTip, out float colliderBottomOffset, out GameObject screenSource)
+        {
+            root = new GameObject("identiFINDER");
+            var instance = Instantiate(m_detectorPrefab);
+            instance.name = "identiFINDER Model";
+            instance.transform.SetParent(root.transform, false);
+            screenSource = instance;
+
+            // A world-space readout needs no UI input; drop the prefab's EventSystem (avoids dupes).
+            foreach (var eventSystem in instance.GetComponentsInChildren<UnityEngine.EventSystems.EventSystem>(true))
+            {
+                Destroy(eventSystem.gameObject);
+            }
+
+            // Auto-scale to a sane size, then translate so the mesh centre sits at the root origin.
+            if (TryGetMeshBounds(instance, out var bounds) && bounds.size.y > 1e-4f)
+            {
+                instance.transform.localScale *= Mathf.Clamp(m_detectorTargetHeight / bounds.size.y, 1e-4f, 1000f);
+                if (TryGetMeshBounds(instance, out bounds))
+                {
+                    instance.transform.position += root.transform.position - bounds.center;
+                    TryGetMeshBounds(instance, out bounds);
+                }
+            }
+            else
+            {
+                bounds = new Bounds(root.transform.position, new Vector3(0.08f, m_detectorTargetHeight, 0.06f));
+            }
+
+            var halfHeight = Mathf.Max(0.02f, bounds.size.y * 0.5f);
+
+            var box = root.AddComponent<BoxCollider>();
+            box.center = root.transform.InverseTransformPoint(bounds.center);
+            box.size = bounds.size;
+
+            var rigidbody = root.AddComponent<Rigidbody>();
+            rigidbody.mass = 0.4f;
+            rigidbody.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+            rigidbody.interpolation = RigidbodyInterpolation.Interpolate;
+            rigidbody.isKinematic = false;
+
+            var tip = new GameObject("Sensor Tip");
+            tip.transform.SetParent(root.transform, false);
+            tip.transform.localPosition = new Vector3(0f, halfHeight, 0f);
+            sensorTip = tip.transform;
+
+            colliderBottomOffset = halfHeight + 0.01f;
+        }
+
+        // Bounds of the 3D mesh ONLY — skips the world-space screen Canvas + sprite overlay, whose
+        // authored ~300-unit offset would otherwise blow up the bounds and shrink/misplace the model.
+        private static bool TryGetMeshBounds(GameObject root, out Bounds bounds)
+        {
+            bounds = default;
+            var hasBounds = false;
+            foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
+            {
+                if (renderer == null || renderer is SpriteRenderer || renderer.GetComponentInParent<Canvas>() != null)
+                {
+                    continue;
+                }
+
+                if (!hasBounds)
+                {
+                    bounds = renderer.bounds;
+                    hasBounds = true;
+                }
+                else
+                {
+                    bounds.Encapsulate(renderer.bounds);
+                }
+            }
+
+            return hasBounds;
         }
 
         private void RestorePersistentObstacles()
@@ -2277,7 +2403,11 @@ namespace SimJam.BarrelSimulator
             showDebugLabel = m_debugLabelsVisible;
 #endif
             barrel.Initialize(spec.Label, GetRandomRadiationCount(), showDebugLabel);
-            AddBarrelSizeSticker(spec, slot, isSideways, labelForward, finalRotation);
+            if (m_showBarrelSizeStickers)
+            {
+                AddBarrelSizeSticker(spec, slot, isSideways, labelForward, finalRotation);
+            }
+
             return barrel;
         }
 
@@ -2443,11 +2573,38 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        // Returns the colleague's Metal/Paint material pair for a barrel size (55 + 30 share a group,
+        // 5-gal has its own), or null if none are assigned (then the procedural tints are used).
+        private Material[] GetBarrelMaterialOverride(BarrelSize size)
+        {
+            var metal = size == BarrelSize.Gallon5 ? m_barrelSmallMetal : m_barrelLargeMetal;
+            var paint = size == BarrelSize.Gallon5 ? m_barrelSmallPaint : m_barrelLargePaint;
+            if (metal != null && paint != null)
+            {
+                return new[] { metal, paint };
+            }
+
+            if (metal != null)
+            {
+                return new[] { metal };
+            }
+
+            return paint != null ? new[] { paint } : null;
+        }
+
         private Material[] GetBarrelTintVariants(GameObject barrelObject, BarrelSpec spec)
         {
             if (m_barrelTintVariants.TryGetValue(spec.Size, out var cachedVariants))
             {
                 return cachedVariants;
+            }
+
+            // Colleague's authored PBR materials override the procedural tints when assigned.
+            var overrideVariants = GetBarrelMaterialOverride(spec.Size);
+            if (overrideVariants != null && overrideVariants.Length > 0)
+            {
+                m_barrelTintVariants[spec.Size] = overrideVariants;
+                return overrideVariants;
             }
 
             var sourceRenderer = barrelObject.GetComponentInChildren<Renderer>();
