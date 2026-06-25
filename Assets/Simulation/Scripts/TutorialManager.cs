@@ -367,24 +367,24 @@ namespace SimJam.Tutorial
             m_steps.Add(new TutorialStep
             {
                 title = "Tutorial Overview",
-                caption = "Before beginning the mission, you will complete a brief tutorial covering:\n\n- Movement\n- Teleportation\n- Operating the detector\n- Understanding barrel readings"
-            });
-            m_steps.Add(new TutorialStep
-            {
-                title = "Tutorial: Movement",
-                caption = "Use your controller to move through the environment.\n\nWalk to the highlighted marker to continue.",
-                requireCompletionToContinue = true
+                caption = "Before beginning the mission, you will practice the basics:\n\n- Teleporting around the room\n- Picking up and using the detector\n- Reading radiation levels\n- Submitting the barrel you think is correct"
             });
             m_steps.Add(new TutorialStep
             {
                 title = "Tutorial: Teleportation",
-                caption = "Aim at the floor with your right controller and press the right trigger to teleport.\n\nTeleport to continue.",
+                caption = "Movement is teleport-only.\n\nPoint either controller at the ground to place the teleport marker. A green dot means you can go there. A red dot means you cannot go there. Click the back trigger on either controller to teleport.",
+                requireCompletionToContinue = true
+            });
+            m_steps.Add(new TutorialStep
+            {
+                title = "Tutorial: Teleport Practice",
+                caption = "Point at the floor near the highlighted marker. When the dot turns green, click the back trigger on either controller.\n\nTeleport once to continue.",
                 requireCompletionToContinue = true
             });
             m_steps.Add(new TutorialStep
             {
                 title = "Tutorial: Detector Operations",
-                caption = "Hold the grip button near the IdentiFINDER to pick it up.\n\nPoint it at a barrel and watch the reading change to continue.",
+                caption = "Move your controller near the IdentiFINDER and hold the back trigger to pick it up.\n\nWave the detector around the barrels and move it toward where you think the radioactive material is located. The readings appear automatically. In the mission, press A when you believe you have found the correct barrel.",
                 requireCompletionToContinue = true
             });
             m_steps.Add(new TutorialStep
@@ -396,7 +396,7 @@ namespace SimJam.Tutorial
             m_steps.Add(new TutorialStep
             {
                 title = "Mission Briefing",
-                caption = "You will have 3 minutes to inspect the containers using the IdentiFINDER detector.\n\nRadiation levels are randomized across each barrel in the room. Compare detector readings across all containers and determine which container exhibits the highest radiation level.",
+                caption = "You will have 3 minutes to inspect the containers using the IdentiFINDER detector.\n\nWave the detector around the barrels and follow the readings toward the suspected radioactive material. When you believe you have found the correct barrel, aim at it and press A to submit.",
                 nextButtonLabel = "Begin Mission"
             });
         }
@@ -565,6 +565,7 @@ namespace SimJam.Tutorial
 
             var labelText = CreateText(rectTransform, "Label", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, 20f, TextAlignmentOptions.Center);
             labelText.text = label;
+            labelText.fontStyle = FontStyles.Bold;
             labelText.color = m_buttonSprite == null ? Color.white : new Color(0.03f, 0.035f, 0.04f, 1f);
             labelText.enableAutoSizing = true;
             labelText.fontSizeMin = 16f;

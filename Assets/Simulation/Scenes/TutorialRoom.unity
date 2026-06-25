@@ -15507,18 +15507,18 @@ MonoBehaviour:
       m_PersistentCalls:
         m_Calls: []
   - title: Tutorial Overview
-    caption: 'Before beginning the mission, you will complete a brief tutorial covering:
+    caption: 'Before beginning the mission, you will practice the basics:
 
 
       -
-      Movement
+      Teleporting around the room
 
-      - Teleportation
+      - Picking up and using the detector
 
-      - Operating the detector
+      -
+      Reading radiation levels
 
-      - Understanding
-      the barrel readings'
+      - Submitting the barrel you think is correct'
     backgroundImage: {fileID: 0}
     nextButtonLabel: Continue
     canGoBack: 1
@@ -15530,12 +15530,13 @@ MonoBehaviour:
     onStepCompleted:
       m_PersistentCalls:
         m_Calls: []
-  - title: 'Tutorial: Movement'
-    caption: 'Use your controller to move through the environment.
+  - title: 'Tutorial: Teleportation'
+    caption: 'Movement is teleport-only.
 
 
-      Walk to
-      the highlighted marker to continue.'
+      Point either controller at the ground
+      to place the teleport marker. A green dot means you can go there. A red dot
+      means you cannot go there. Click the back trigger on either controller to teleport.'
     backgroundImage: {fileID: 0}
     nextButtonLabel: Continue
     canGoBack: 1
@@ -15547,12 +15548,13 @@ MonoBehaviour:
     onStepCompleted:
       m_PersistentCalls:
         m_Calls: []
-  - title: 'Tutorial: Teleportation'
-    caption: 'Aim at the floor with your right controller and press the right trigger
-      to teleport.
+  - title: 'Tutorial: Teleport Practice'
+    caption: 'Point at the floor near the highlighted marker. When the dot turns
+      green, click the back trigger on either controller.
 
 
-      Teleport to continue.'
+      Teleport once to
+      continue.'
     backgroundImage: {fileID: 0}
     nextButtonLabel: Continue
     canGoBack: 1
@@ -15565,11 +15567,14 @@ MonoBehaviour:
       m_PersistentCalls:
         m_Calls: []
   - title: 'Tutorial: Detector Operations'
-    caption: 'Hold the grip button near the IdentiFINDER to pick it up.
+    caption: 'Move your controller near the IdentiFINDER and hold the back trigger
+      to pick it up.
 
 
-      Point
-      it at a barrel and watch the reading change to continue.'
+      Wave the detector around the barrels and move it toward
+      the area where you think the radioactive material is located. The readings
+      appear automatically. In the mission, press A when you believe you have found
+      the correct barrel.'
     backgroundImage: {fileID: 0}
     nextButtonLabel: Continue
     canGoBack: 1
@@ -15603,9 +15608,9 @@ MonoBehaviour:
       detector.
 
 
-      Radiation levels are randomized across each barrel in the
-      room. Compare detector readings across all containers and determine which container
-      exhibits the highest radiation level.'
+      Wave the detector around the barrels and follow the readings
+      toward the suspected radioactive material. When you believe you have found
+      the correct barrel, aim at it and press A to submit.'
     backgroundImage: {fileID: 0}
     nextButtonLabel: Begin Mission
     canGoBack: 1
@@ -15695,7 +15700,7 @@ MonoBehaviour:
   m_defaultEyeHeight: 1.6
   m_roomHalfExtents: {x: 3.55, y: 3.55}
   m_edgeMargin: 0.28
-  m_enableSmoothMove: 1
+  m_enableSmoothMove: 0
   m_smoothMoveSpeed: 1.35
   m_enableSnapTurn: 1
   m_snapTurnDegrees: 30

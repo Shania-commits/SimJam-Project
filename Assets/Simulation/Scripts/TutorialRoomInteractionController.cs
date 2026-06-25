@@ -28,7 +28,7 @@ namespace SimJam.Tutorial
         [SerializeField, Min(0.05f)] private float m_edgeMargin = 0.28f;
 
         [Header("Movement")]
-        [SerializeField] private bool m_enableSmoothMove = true;
+        [SerializeField] private bool m_enableSmoothMove;
         [SerializeField, Min(0.1f)] private float m_smoothMoveSpeed = 1.35f;
         [SerializeField] private bool m_enableSnapTurn = true;
         [SerializeField, Min(5f)] private float m_snapTurnDegrees = 30f;
@@ -308,7 +308,7 @@ namespace SimJam.Tutorial
 
         private bool WasTeleportPressed()
         {
-            if (OVRInput.GetDown(OVRInput.RawButton.RIndexTrigger))
+            if (OVRInput.GetDown(OVRInput.RawButton.LHandTrigger) || OVRInput.GetDown(OVRInput.RawButton.RHandTrigger))
             {
                 return true;
             }
