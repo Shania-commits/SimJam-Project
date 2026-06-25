@@ -43,7 +43,12 @@ namespace SimJam.Tutorial
             }
 
             PulseMarker();
-            if (Vector3.Distance(GetPlayerPosition(), transform.position) <= m_completionRadius)
+            // Compare on the horizontal plane only: the player target is the headset (~1.6 m eye
+            // height) while the marker sits on the floor, so a full 3D distance never drops below
+            // head height and the step could never complete. Ignore the vertical offset.
+            var toMarker = GetPlayerPosition() - transform.position;
+            toMarker.y = 0f;
+            if (toMarker.magnitude <= m_completionRadius)
             {
                 m_hasCompleted = true;
                 SetMarkerVisible(false);
