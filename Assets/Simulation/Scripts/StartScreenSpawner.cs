@@ -37,6 +37,8 @@ namespace SimJam
         private Canvas m_canvas;
         private Transform m_followTarget;
         private bool m_loading;
+        private bool m_panelAnchored;
+        private Vector3 m_anchorPosition;
 
         private void Start()
         {
@@ -154,15 +156,32 @@ namespace SimJam
 
             if (m_followTarget == null)
             {
-                m_canvas.transform.position = new Vector3(0f, 1.55f + m_panelVerticalOffset, m_panelDistance);
-                m_canvas.transform.rotation = Quaternion.identity;
                 return;
             }
 
-            m_canvas.transform.position = m_followTarget.position
-                + m_followTarget.forward * m_panelDistance
-                + Vector3.up * m_panelVerticalOffset;
-            m_canvas.transform.rotation = m_followTarget.rotation;
+            // Anchor the position ONCE in front of the player, then billboard it (yaw-only) to face the
+            // player each frame so it stays readable from any heading without the head-lock swim.
+            if (!m_panelAnchored)
+            {
+                var flatForward = m_followTarget.forward;
+                flatForward.y = 0f;
+                if (flatForward.sqrMagnitude < 1e-4f)
+                {
+                    flatForward = Vector3.forward;
+                }
+
+                flatForward.Normalize();
+                m_anchorPosition = m_followTarget.position + flatForward * m_panelDistance + Vector3.up * m_panelVerticalOffset;
+                m_panelAnchored = true;
+            }
+
+            m_canvas.transform.position = m_anchorPosition;
+            var toPanel = m_anchorPosition - m_followTarget.position;
+            toPanel.y = 0f;
+            if (toPanel.sqrMagnitude > 1e-4f)
+            {
+                m_canvas.transform.rotation = Quaternion.LookRotation(toPanel.normalized, Vector3.up);
+            }
         }
 
         private static RectTransform CreateRect(Transform parent, string objectName, Vector2 anchorMin, Vector2 anchorMax, Vector2 anchoredPosition, Vector2 size)

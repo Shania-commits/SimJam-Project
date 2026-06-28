@@ -55,6 +55,8 @@ namespace SimJam.Tutorial
         [SerializeField] private bool m_useWorldSpaceCanvas;
         [SerializeField] private bool m_keepPanelInFrontOfCamera = true;
         [SerializeField, Min(0.5f)] private float m_panelDistance = 2.2f;
+        // Distance out to anchor the panel as a flat screen on the wall the player faces at spawn.
+        [SerializeField, Min(0.5f)] private float m_panelWallDistance = 3.2f;
         [SerializeField] private float m_panelVerticalOffset;
         [SerializeField] private Vector2 m_panelSize = new Vector2(960f, 540f);
         [SerializeField, Min(0.0005f)] private float m_worldSpaceScale = 0.00225f;
@@ -74,6 +76,7 @@ namespace SimJam.Tutorial
         private bool m_isPaused;
         private float m_timeScaleBeforePause = 1f;
         private Transform m_panelFollowTarget;
+        private bool m_panelAnchored;
 
         public int CurrentStepIndex => m_currentStepIndex;
         public bool IsPaused => m_isPaused;
@@ -596,7 +599,7 @@ namespace SimJam.Tutorial
 
         private void UpdateWorldPanelPose()
         {
-            if (m_canvas == null)
+            if (m_canvas == null || m_panelAnchored)
             {
                 return;
             }
@@ -608,15 +611,24 @@ namespace SimJam.Tutorial
 
             if (m_panelFollowTarget == null)
             {
-                m_canvas.transform.position = new Vector3(0f, 1.55f + m_panelVerticalOffset, 1.8f);
-                m_canvas.transform.rotation = Quaternion.identity;
                 return;
             }
 
+            // Anchor the panel ONCE as a flat screen out on the wall the player faces at spawn, then
+            // freeze it (no head-lock swim). It stays put; the player can look around it freely.
+            var flatForward = m_panelFollowTarget.forward;
+            flatForward.y = 0f;
+            if (flatForward.sqrMagnitude < 1e-4f)
+            {
+                flatForward = Vector3.forward;
+            }
+
+            flatForward.Normalize();
             m_canvas.transform.position = m_panelFollowTarget.position
-                + m_panelFollowTarget.forward * m_panelDistance
+                + flatForward * m_panelWallDistance
                 + Vector3.up * m_panelVerticalOffset;
-            m_canvas.transform.rotation = m_panelFollowTarget.rotation;
+            m_canvas.transform.rotation = Quaternion.LookRotation(flatForward, Vector3.up);
+            m_panelAnchored = true;
         }
 
         private static RectTransform CreateRect(Transform parent, string objectName, Vector2 anchorMin, Vector2 anchorMax, Vector2 anchoredPosition, Vector2 size)
