@@ -15636,7 +15636,7 @@ MonoBehaviour:
   m_useWorldSpaceCanvas: 1
   m_keepPanelInFrontOfCamera: 1
   m_panelDistance: 2.2
-  m_panelVerticalOffset: 0
+  m_panelVerticalOffset: 0.35
   m_panelSize: {x: 960, y: 540}
   m_worldSpaceScale: 0.00225
   m_pauseWithTimeScale: 1

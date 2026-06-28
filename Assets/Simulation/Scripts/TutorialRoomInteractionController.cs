@@ -55,9 +55,10 @@ namespace SimJam.Tutorial
         [SerializeField, Min(0.2f)] private float m_armsTargetReach = 0.52f; // smaller / thinner
         [SerializeField] private Vector3 m_armsElbowPole = new Vector3(0.3f, -0.4f, -0.1f);
         [SerializeField] private bool m_armsMatchHandToController = true;
-        // Gentler curl: the FBX's per-finger bend axes vary, so an aggressive curl looks disjointed.
-        // Set to 0 for a relaxed open hand if grabbing still looks broken.
-        [SerializeField, Range(0f, 130f)] private float m_armsFingerCurlAngle = 40f;
+        // Finger curl OFF by default: the FBX's per-finger bend axes vary, so curling on grab
+        // disorients the hand. 0 = relaxed open hand (correct pose). A proper closing fist needs
+        // per-bone curl axes (a bigger change) — raise this only once that's implemented.
+        [SerializeField, Range(0f, 130f)] private float m_armsFingerCurlAngle;
 
         private GameObject m_teleportMarker;
         private Renderer m_teleportMarkerRenderer;
