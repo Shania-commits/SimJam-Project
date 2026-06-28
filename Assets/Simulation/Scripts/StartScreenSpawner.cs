@@ -41,6 +41,10 @@ namespace SimJam
         private void Start()
         {
             BuildUi();
+            if (FindAnyObjectByType<VrUiPointer>() == null)
+            {
+                gameObject.AddComponent<VrUiPointer>();
+            }
         }
 
         private void LateUpdate()
@@ -50,7 +54,9 @@ namespace SimJam
 
         private void Update()
         {
-            if (!m_loading && (OVRInput.GetDown(OVRInput.RawButton.A) || WasStartKeyPressed()))
+            // Start is via the controller laser clicking the Start button (VrUiPointer); the keyboard
+            // key is the editor desktop fallback only.
+            if (!m_loading && WasStartKeyPressed())
             {
                 StartGame();
             }

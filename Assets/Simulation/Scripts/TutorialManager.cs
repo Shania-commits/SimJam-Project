@@ -98,6 +98,15 @@ namespace SimJam.Tutorial
             WireButtons();
             m_currentStepIndex = Mathf.Clamp(m_startingStepIndex, 0, Mathf.Max(0, m_steps.Count - 1));
             ShowCurrentStep();
+            EnsureUiPointer();
+        }
+
+        private void EnsureUiPointer()
+        {
+            if (FindAnyObjectByType<VrUiPointer>() == null)
+            {
+                gameObject.AddComponent<VrUiPointer>();
+            }
         }
 
         private void LateUpdate()
@@ -115,17 +124,16 @@ namespace SimJam.Tutorial
                 TogglePause();
             }
 
-            // Quest controller advance. The tutorial panel is a world-space canvas with no laser
-            // pointer, so the player advances with the face buttons instead of clicking: A = next
-            // (or "Begin Mission" on the last step), B = back. GoToNextStep already enforces gated-
-            // step completion, so a button press can never skip a step that isn't finished.
+            // Forward/back is now driven by the controller laser pointer clicking the on-screen
+            // Continue/Previous buttons (VrUiPointer). These keyboard keys are the editor desktop
+            // fallback only. GoToNextStep still enforces gated-step completion either way.
             if (!m_isPaused)
             {
-                if (OVRInput.GetDown(OVRInput.RawButton.A) || WasAdvanceKeyPressed())
+                if (WasAdvanceKeyPressed())
                 {
                     GoToNextStep();
                 }
-                else if (OVRInput.GetDown(OVRInput.RawButton.B) || WasBackKeyPressed())
+                else if (WasBackKeyPressed())
                 {
                     GoToPreviousStep();
                 }
