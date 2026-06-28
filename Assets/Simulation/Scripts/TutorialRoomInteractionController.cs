@@ -52,13 +52,13 @@ namespace SimJam.Tutorial
         // orientation (body yaw), elbow naturalness (target reach + elbow pole), and the wrist.
         [SerializeField] private Vector3 m_armsChestOffset = new Vector3(0f, -0.2f, -0.05f); // lower attach
         [SerializeField, Range(-180f, 180f)] private float m_armsBodyYawOffset;
-        [SerializeField, Min(0.2f)] private float m_armsTargetReach = 0.52f; // smaller / thinner
+        [SerializeField, Min(0.2f)] private float m_armsTargetReach = 0.46f; // a bit smaller / skinnier
         [SerializeField] private Vector3 m_armsElbowPole = new Vector3(0.3f, -0.4f, -0.1f);
         [SerializeField] private bool m_armsMatchHandToController = true;
-        // Finger curl OFF by default: the FBX's per-finger bend axes vary, so curling on grab
-        // disorients the hand. 0 = relaxed open hand (correct pose). A proper closing fist needs
-        // per-bone curl axes (a bigger change) — raise this only once that's implemented.
-        [SerializeField, Range(0f, 130f)] private float m_armsFingerCurlAngle;
+        // Gentle finger curl on grab. MixamoArmRig now bends each bone around its own palm-ward axis
+        // so it no longer disorients; flip the sign if fingers curl backward (away from the palm).
+        [SerializeField, Range(0f, 130f)] private float m_armsFingerCurlAngle = 30f;
+        [SerializeField] private float m_armsFingerCurlSign = 1f;
 
         private GameObject m_teleportMarker;
         private Renderer m_teleportMarkerRenderer;
@@ -435,6 +435,7 @@ namespace SimJam.Tutorial
             m_customArmRig.ElbowPoleLocal = m_armsElbowPole;
             m_customArmRig.MatchHandToController = m_armsMatchHandToController;
             m_customArmRig.FingerCurlAngle = m_armsFingerCurlAngle;
+            m_customArmRig.FingerCurlSign = m_armsFingerCurlSign;
             m_customArmRig.Initialize(m_cameraRig, m_customArmsInstance);
         }
 

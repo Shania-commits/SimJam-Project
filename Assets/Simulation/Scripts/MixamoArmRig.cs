@@ -33,6 +33,8 @@ namespace SimJam.BarrelSimulator
         // is the per-finger-bone local bend axis — Mixamo's varies, so it is tunable if curl looks off.
         [Range(0f, 130f)] public float FingerCurlAngle = 70f;
         public Vector3 FingerCurlAxis = new Vector3(0f, 0f, 1f);
+        // Flip to -1 if the fingers curl backward (away from the palm) on a given FBX.
+        public float FingerCurlSign = 1f;
 
         private OVRCameraRig m_rig;
         private Transform m_modelRoot;
@@ -50,6 +52,7 @@ namespace SimJam.BarrelSimulator
         private readonly bool[] m_handCalibrated = new bool[2];
         private readonly Transform[][] m_fingerBones = new Transform[2][];
         private readonly Quaternion[][] m_fingerRest = new Quaternion[2][];
+        private readonly Vector3[][] m_fingerBendAxis = new Vector3[2][];
         private bool m_ready;
 
         public bool IsReady => m_ready;
@@ -111,14 +114,48 @@ namespace SimJam.BarrelSimulator
                     m_upperRestAxis[i] = m_upperArm[i].InverseTransformPoint(m_foreArm[i].position).normalized;
                     m_foreRestAxis[i] = m_foreArm[i].InverseTransformPoint(m_hand[i].position).normalized;
 
-                    // All finger joints (everything under the Hand bone) + their rest rotations, for curl.
+                    // All finger joints (everything under the Hand bone) + their rest rotations, plus a
+                    // per-bone bend axis computed from the hand geometry so curl bends toward the palm.
+                    // A single fixed local axis splays because Mixamo's per-bone orientations vary.
                     var fingers = new List<Transform>();
                     CollectDescendants(m_hand[i], fingers);
                     m_fingerBones[i] = fingers.ToArray();
                     m_fingerRest[i] = new Quaternion[fingers.Count];
+                    m_fingerBendAxis[i] = new Vector3[fingers.Count];
+
+                    // Estimate the palm normal from the knuckle fan (auto-mirrors for left/right).
+                    var fingerPrefix = i == 0 ? "mixamorig:Left" : "mixamorig:Right";
+                    var indexKnuckle = FindDeep(m_hand[i], fingerPrefix + "HandIndex1");
+                    var middleKnuckle = FindDeep(m_hand[i], fingerPrefix + "HandMiddle1");
+                    var pinkyKnuckle = FindDeep(m_hand[i], fingerPrefix + "HandPinky1");
+                    var palmNormal = Vector3.up;
+                    if (indexKnuckle != null && middleKnuckle != null && pinkyKnuckle != null)
+                    {
+                        var alongFingers = (middleKnuckle.position - m_hand[i].position).normalized;
+                        var acrossKnuckles = (pinkyKnuckle.position - indexKnuckle.position).normalized;
+                        var n = Vector3.Cross(alongFingers, acrossKnuckles);
+                        if (n.sqrMagnitude > 1e-8f)
+                        {
+                            palmNormal = n.normalized;
+                        }
+                    }
+
                     for (var f = 0; f < fingers.Count; f++)
                     {
-                        m_fingerRest[i][f] = fingers[f].localRotation;
+                        var bone = fingers[f];
+                        m_fingerRest[i][f] = bone.localRotation;
+                        if (bone.childCount > 0)
+                        {
+                            var dirToChild = bone.GetChild(0).position - bone.position;
+                            var bendAxisWorld = Vector3.Cross(dirToChild.normalized, palmNormal);
+                            m_fingerBendAxis[i][f] = bendAxisWorld.sqrMagnitude > 1e-8f
+                                ? bone.InverseTransformDirection(bendAxisWorld.normalized)
+                                : Vector3.zero;
+                        }
+                        else
+                        {
+                            m_fingerBendAxis[i][f] = Vector3.zero; // fingertip: no child, don't curl
+                        }
                     }
                 }
             }
@@ -232,15 +269,20 @@ namespace SimJam.BarrelSimulator
                 return;
             }
 
+            var axes = m_fingerBendAxis[i];
             var grip = OVRInput.Get(i == 0 ? OVRInput.RawAxis1D.LHandTrigger : OVRInput.RawAxis1D.RHandTrigger);
-            var curl = Quaternion.AngleAxis(Mathf.Clamp01(grip) * FingerCurlAngle, FingerCurlAxis);
+            var amount = Mathf.Clamp01(grip) * FingerCurlAngle * FingerCurlSign;
             var rest = m_fingerRest[i];
             for (var f = 0; f < bones.Length; f++)
             {
-                if (bones[f] != null)
+                if (bones[f] == null)
                 {
-                    bones[f].localRotation = rest[f] * curl;
+                    continue;
                 }
+
+                // Bend around each bone's palm-ward axis; fall back to the legacy fixed axis if unknown.
+                var axis = axes != null && f < axes.Length && axes[f].sqrMagnitude > 1e-8f ? axes[f] : FingerCurlAxis;
+                bones[f].localRotation = rest[f] * Quaternion.AngleAxis(amount, axis);
             }
         }
 
