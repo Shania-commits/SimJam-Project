@@ -46,6 +46,17 @@ namespace SimJam.Tutorial
         [SerializeField, Min(0.05f)] private float m_detectorGrabRadius = 0.18f;
         [SerializeField, Min(0f)] private float m_detectorCompletionCps = 3f;
 
+        [Header("Arms")]
+        [SerializeField] private GameObject m_customArmsPrefab;
+        // Arm IK tunables (defaults match the lab rig). Adjust in the Inspector + re-Play to dial
+        // orientation (body yaw), elbow naturalness (target reach + elbow pole), and the wrist.
+        [SerializeField] private Vector3 m_armsChestOffset = new Vector3(0f, -0.13f, -0.05f);
+        [SerializeField, Range(-180f, 180f)] private float m_armsBodyYawOffset;
+        [SerializeField, Min(0.2f)] private float m_armsTargetReach = 0.58f;
+        [SerializeField] private Vector3 m_armsElbowPole = new Vector3(0.3f, -0.4f, -0.1f);
+        [SerializeField] private bool m_armsMatchHandToController = true;
+        [SerializeField, Range(0f, 130f)] private float m_armsFingerCurlAngle = 70f;
+
         private GameObject m_teleportMarker;
         private Renderer m_teleportMarkerRenderer;
         private Material m_validTeleportMaterial;
@@ -56,6 +67,8 @@ namespace SimJam.Tutorial
         private GrabbableTool m_detectorGrabTool;
         private RadiationDetector m_detector;
         private bool m_detectorWasGrabbed;
+        private GameObject m_customArmsInstance;
+        private MixamoArmRig m_customArmRig;
 
         private void Awake()
         {
@@ -76,11 +89,14 @@ namespace SimJam.Tutorial
             {
                 SpawnWorkingDetector();
             }
+
+            EnsureCustomArms();
         }
 
         private void Update()
         {
             ResolvePlayerReferences();
+            EnsureCustomArms();
             UpdateMovement();
             UpdateTeleport();
             UpdateDetectorCompletion();
@@ -374,6 +390,49 @@ namespace SimJam.Tutorial
             {
                 collider.enabled = false;
             }
+        }
+
+        // Spawns the Mixamo arms once (like the lab's EnsureCustomArms) so the tutorial shows the
+        // player's arms. Uses MixamoArmRig's built-in default tunables.
+        private void EnsureCustomArms()
+        {
+            if (m_customArmsPrefab == null || m_customArmsInstance != null || m_cameraRig == null)
+            {
+                return;
+            }
+
+            m_customArmsInstance = Instantiate(m_customArmsPrefab, transform);
+            m_customArmsInstance.name = "Tutorial Custom Arms";
+
+            // The Mixamo FBX imports without textures; give every skinned mesh a solid skin material (a
+            // plain Standard material never renders magenta on the Built-in pipeline) and stop frustum
+            // culling once IK moves the bones outside the baked bounds.
+            var skin = new Material(Shader.Find("Standard")) { name = "Tutorial Arm Skin", color = new Color(0.80f, 0.66f, 0.55f) };
+            skin.SetFloat("_Glossiness", 0.25f);
+            foreach (var smr in m_customArmsInstance.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+            {
+                smr.updateWhenOffscreen = true;
+                var existing = smr.sharedMaterials;
+                if (existing.Length == 0 || existing[0] == null || existing[0].mainTexture == null)
+                {
+                    var mats = new Material[Mathf.Max(1, existing.Length)];
+                    for (var i = 0; i < mats.Length; i++)
+                    {
+                        mats[i] = skin;
+                    }
+
+                    smr.sharedMaterials = mats;
+                }
+            }
+
+            m_customArmRig = m_customArmsInstance.AddComponent<MixamoArmRig>();
+            m_customArmRig.ChestOffsetFromHead = m_armsChestOffset;
+            m_customArmRig.BodyYawOffsetDegrees = m_armsBodyYawOffset;
+            m_customArmRig.TargetArmReach = m_armsTargetReach;
+            m_customArmRig.ElbowPoleLocal = m_armsElbowPole;
+            m_customArmRig.MatchHandToController = m_armsMatchHandToController;
+            m_customArmRig.FingerCurlAngle = m_armsFingerCurlAngle;
+            m_customArmRig.Initialize(m_cameraRig, m_customArmsInstance);
         }
 
         private void SpawnWorkingDetector()

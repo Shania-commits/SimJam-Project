@@ -15712,6 +15712,7 @@ MonoBehaviour:
   m_detectorHomeEuler: {x: 0, y: 98, z: 90}
   m_detectorGrabRadius: 0.18
   m_detectorCompletionCps: 3
+  m_customArmsPrefab: {fileID: 919132149155446097, guid: 38a4119925ba1ea458807788b731ec55, type: 3}
 --- !u!1 &2145739001
 GameObject:
   m_ObjectHideFlags: 0
