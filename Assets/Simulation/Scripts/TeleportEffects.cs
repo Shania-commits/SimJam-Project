@@ -53,19 +53,15 @@ namespace SimJam
 
         private static Material CreateParticleMaterial(Color color)
         {
-            var shader = Shader.Find("Particles/Standard Unlit")
-                         ?? Shader.Find("Legacy Shaders/Particles/Additive")
-                         ?? Shader.Find("Sprites/Default")
-                         ?? Shader.Find("Standard");
-            var material = new Material(shader) { name = "Teleport Burst Particle", color = color };
+            // Sprites/Default is in the project's Always Included Shaders, so it survives on-device
+            // shader stripping. The nicer Particles/* shaders are only created at runtime here with no
+            // asset referencing them, so a device build strips them and the burst renders magenta.
+            // Tinting comes from the particle start color (vertex color), so keep the material white.
+            var shader = Shader.Find("Sprites/Default") ?? Shader.Find("Standard");
+            var material = new Material(shader) { name = "Teleport Burst Particle", color = Color.white };
             if (material.HasProperty("_Color"))
             {
-                material.SetColor("_Color", color);
-            }
-            if (material.HasProperty("_EmissionColor"))
-            {
-                material.EnableKeyword("_EMISSION");
-                material.SetColor("_EmissionColor", new Color(color.r, color.g, color.b) * 2f);
+                material.SetColor("_Color", Color.white);
             }
             return material;
         }
