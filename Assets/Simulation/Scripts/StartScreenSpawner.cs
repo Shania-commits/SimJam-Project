@@ -3,6 +3,9 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 namespace SimJam
 {
@@ -47,10 +50,24 @@ namespace SimJam
 
         private void Update()
         {
-            if (!m_loading && OVRInput.GetDown(OVRInput.RawButton.A))
+            if (!m_loading && (OVRInput.GetDown(OVRInput.RawButton.A) || WasStartKeyPressed()))
             {
                 StartGame();
             }
+        }
+
+        // Editor desktop fallback: Space/Enter starts, so the title screen can be tested flat without
+        // a VR controller (the world-space button isn't mouse-clickable in flat Play mode).
+        private static bool WasStartKeyPressed()
+        {
+#if UNITY_EDITOR && ENABLE_INPUT_SYSTEM
+            return Keyboard.current != null
+                   && (Keyboard.current.spaceKey.wasPressedThisFrame
+                       || Keyboard.current.enterKey.wasPressedThisFrame
+                       || Keyboard.current.numpadEnterKey.wasPressedThisFrame);
+#else
+            return false;
+#endif
         }
 
         public void StartGame()

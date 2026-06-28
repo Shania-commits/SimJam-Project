@@ -121,11 +121,11 @@ namespace SimJam.Tutorial
             // step completion, so a button press can never skip a step that isn't finished.
             if (!m_isPaused)
             {
-                if (OVRInput.GetDown(OVRInput.RawButton.A))
+                if (OVRInput.GetDown(OVRInput.RawButton.A) || WasAdvanceKeyPressed())
                 {
                     GoToNextStep();
                 }
-                else if (OVRInput.GetDown(OVRInput.RawButton.B))
+                else if (OVRInput.GetDown(OVRInput.RawButton.B) || WasBackKeyPressed())
                 {
                     GoToPreviousStep();
                 }
@@ -419,6 +419,30 @@ namespace SimJam.Tutorial
             return Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame;
 #else
             return Input.GetKeyDown(KeyCode.Escape);
+#endif
+        }
+
+        // Editor desktop fallback so the tutorial can be driven without a VR controller: Space/Enter
+        // advances, Backspace goes back. The world-space VR panel isn't mouse-clickable in flat Play
+        // mode and OVRInput has no controller there, so these make flat desktop testing possible.
+        private static bool WasAdvanceKeyPressed()
+        {
+#if UNITY_EDITOR && ENABLE_INPUT_SYSTEM
+            return Keyboard.current != null
+                   && (Keyboard.current.spaceKey.wasPressedThisFrame
+                       || Keyboard.current.enterKey.wasPressedThisFrame
+                       || Keyboard.current.numpadEnterKey.wasPressedThisFrame);
+#else
+            return false;
+#endif
+        }
+
+        private static bool WasBackKeyPressed()
+        {
+#if UNITY_EDITOR && ENABLE_INPUT_SYSTEM
+            return Keyboard.current != null && Keyboard.current.backspaceKey.wasPressedThisFrame;
+#else
+            return false;
 #endif
         }
 
