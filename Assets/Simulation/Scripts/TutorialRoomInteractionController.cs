@@ -50,12 +50,14 @@ namespace SimJam.Tutorial
         [SerializeField] private GameObject m_customArmsPrefab;
         // Arm IK tunables (defaults match the lab rig). Adjust in the Inspector + re-Play to dial
         // orientation (body yaw), elbow naturalness (target reach + elbow pole), and the wrist.
-        [SerializeField] private Vector3 m_armsChestOffset = new Vector3(0f, -0.13f, -0.05f);
+        [SerializeField] private Vector3 m_armsChestOffset = new Vector3(0f, -0.2f, -0.05f); // lower attach
         [SerializeField, Range(-180f, 180f)] private float m_armsBodyYawOffset;
-        [SerializeField, Min(0.2f)] private float m_armsTargetReach = 0.58f;
+        [SerializeField, Min(0.2f)] private float m_armsTargetReach = 0.52f; // smaller / thinner
         [SerializeField] private Vector3 m_armsElbowPole = new Vector3(0.3f, -0.4f, -0.1f);
         [SerializeField] private bool m_armsMatchHandToController = true;
-        [SerializeField, Range(0f, 130f)] private float m_armsFingerCurlAngle = 70f;
+        // Gentler curl: the FBX's per-finger bend axes vary, so an aggressive curl looks disjointed.
+        // Set to 0 for a relaxed open hand if grabbing still looks broken.
+        [SerializeField, Range(0f, 130f)] private float m_armsFingerCurlAngle = 40f;
 
         private GameObject m_teleportMarker;
         private Renderer m_teleportMarkerRenderer;
