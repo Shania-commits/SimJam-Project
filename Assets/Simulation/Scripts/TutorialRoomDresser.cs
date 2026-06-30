@@ -133,7 +133,9 @@ namespace SimJam.Tutorial
                 }
 
                 var objectName = sceneTransform.gameObject.name;
-                if (objectName.StartsWith("Barrel_") || objectName == "shelf")
+                // Disable any legacy/baked barrel left in the scene (the dresser no longer spawns
+                // barrels). The runtime teaching barrels are named "...Drum..." so they are immune.
+                if (objectName.Contains("Barrel") || objectName == "shelf")
                 {
                     sceneTransform.gameObject.SetActive(false);
                 }

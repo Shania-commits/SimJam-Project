@@ -15582,12 +15582,11 @@ MonoBehaviour:
       m_PersistentCalls:
         m_Calls: []
   - title: 'Tutorial: Submit a Reading'
-    caption: 'Scan BOTH barrels with the detector. One reads near zero (inert), one
-      spikes high.
+    caption: 'Scan BOTH barrels with the detector. One reads far higher than the other.
 
 
-      Point the detector at the HOT barrel (SUBMIT THIS) and press the A button (or
-      pinch) to submit -- the same control you will use in the mission.'
+      Walk up to each barrel, then aim at the HOT one (SUBMIT THIS) and press the A
+      button (or pinch) to submit -- the same control you will use in the mission.'
     backgroundImage: {fileID: 0}
     nextButtonLabel: Continue
     canGoBack: 1

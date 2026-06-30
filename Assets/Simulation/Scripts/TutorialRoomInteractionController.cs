@@ -57,9 +57,11 @@ namespace SimJam.Tutorial
         // Two barrels (one inert, one radioactive) the player scans + submits to practice the real
         // find-and-submit loop. Assign the lab's 55-gal barrel model so they match the mission barrels.
         [SerializeField] private GameObject m_teachingBarrelPrefab;
-        [SerializeField] private Vector3 m_hotBarrelPosition = new Vector3(-1.1f, 0f, -1.5f);    // "SUBMIT THIS"
-        [SerializeField] private Vector3 m_inertBarrelPosition = new Vector3(-3.4f, 0f, -1.5f);  // "DON'T SUBMIT"
-        [SerializeField, Min(100f)] private float m_hotBarrelActivityCps = 8000f;
+        // Kept far apart (opposite sides of the room) so the hot barrel's inverse-square field does
+        // not bathe the inert one -- the player must walk up to each to see the contrast.
+        [SerializeField] private Vector3 m_hotBarrelPosition = new Vector3(2.8f, 0f, 0.3f);     // "SUBMIT THIS"
+        [SerializeField] private Vector3 m_inertBarrelPosition = new Vector3(-2.8f, 0f, 0.3f);  // "DON'T SUBMIT"
+        [SerializeField, Min(100f)] private float m_hotBarrelActivityCps = 6000f;
         [SerializeField, Min(0)] private int m_teachingSubmitStepIndex = 6;
         [SerializeField, Range(4f, 35f)] private float m_teachingGuessConeAngle = 16f;
 
@@ -563,12 +565,13 @@ namespace SimJam.Tutorial
                 return;
             }
 
-            m_hotBarrel = CreateTeachingBarrel("Tutorial Hot Barrel (SUBMIT)", m_hotBarrelPosition);
+            // Named "Drum" (not "Barrel") so the dresser's legacy-barrel hide pass never disables them.
+            m_hotBarrel = CreateTeachingBarrel("Tutorial Hot Drum (SUBMIT)", m_hotBarrelPosition);
             m_teachingHotSource = m_hotBarrel.AddComponent<RadiationSource>();
             m_teachingHotSource.Configure(m_hotBarrelActivityCps, "Cs-137");
             m_hotLabel = CreateBarrelLabel(m_hotBarrel, "SUBMIT THIS", new Color(0.30f, 1f, 0.45f));
 
-            m_inertBarrel = CreateTeachingBarrel("Tutorial Inert Barrel", m_inertBarrelPosition);
+            m_inertBarrel = CreateTeachingBarrel("Tutorial Inert Drum", m_inertBarrelPosition);
             m_inertLabel = CreateBarrelLabel(m_inertBarrel, "DON'T SUBMIT", new Color(1f, 0.42f, 0.36f));
         }
 
@@ -580,6 +583,8 @@ namespace SimJam.Tutorial
                 : GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             barrel.name = objectName;
             barrel.transform.SetParent(transform, true);
+            // floorPosition.y = 0 assumes the barrel model's pivot is at its base (true for the lab
+            // 55-gal prefab); a centre-pivoted model would need a half-height offset.
             barrel.transform.SetPositionAndRotation(floorPosition, Quaternion.identity);
             FitTeachingBarrel(barrel);
             EnsureLabBarrelCollider(barrel);
@@ -654,7 +659,15 @@ namespace SimJam.Tutorial
         {
             var labelObject = new GameObject(barrel.name + " Label");
             labelObject.transform.SetParent(transform, false);
-            labelObject.transform.position = barrel.transform.position + new Vector3(0f, 1.25f, 0f);
+            // Anchor above the VISIBLE mesh, not the transform pivot (the barrel FBX pivot is offset
+            // horizontally, so the drum renders to the side of its transform position).
+            var anchor = barrel.transform.position + new Vector3(0f, 1.25f, 0f);
+            if (TryGetBarrelBounds(barrel, out var labelBounds))
+            {
+                anchor = labelBounds.center + Vector3.up * (labelBounds.extents.y + 0.35f);
+            }
+
+            labelObject.transform.position = anchor;
 
             var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             var label = labelObject.AddComponent<TextMesh>();
