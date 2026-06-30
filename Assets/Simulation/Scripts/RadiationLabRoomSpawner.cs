@@ -1207,6 +1207,14 @@ namespace SimJam.BarrelSimulator
             m_detectorHomePosition = pedestalPosition + new Vector3(0f, RoomDecorator.PedestalTopHeight + colliderBottomOffset, 0f);
             m_detectorRoot.transform.SetPositionAndRotation(m_detectorHomePosition, m_detectorHomeRotation);
 
+            // Rest on the pedestal without tipping/rolling off (it spawns upright, which is unstable):
+            // kinematic at spawn. GrabbableTool makes it dynamic again on release after the first grab.
+            var detectorBody = m_detectorRoot.GetComponent<Rigidbody>();
+            if (detectorBody != null)
+            {
+                detectorBody.isKinematic = true;
+            }
+
             m_detectorGrabTool = m_detectorRoot.AddComponent<GrabbableTool>();
             m_detectorGrabTool.Initialize(m_cameraRig, m_detectorGrabRadius);
             m_detectorGrabTool.HeldLocalPosition = m_detectorHeldLocalPosition;
