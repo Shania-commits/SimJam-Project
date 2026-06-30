@@ -1372,33 +1372,79 @@ namespace SimJam.BarrelSimulator
                 return;
             }
 
-            var rightNear = m_cameraRig != null && IsControllerNearStartButton(m_cameraRig.rightControllerAnchor);
-            var leftNear = m_cameraRig != null && IsControllerNearStartButton(m_cameraRig.leftControllerAnchor);
-            var pressed = rightNear || leftNear;
+            // Distance from the nearest hand to the cap. Mash it in with your hand — no aim/click.
+            var dist = NearestHandDistanceToStart(out var nearController);
+            const float maxTravel = 0.024f;
+            const float fireTravel = 0.018f;
+            var penetration = Mathf.Max(0f, Mathf.Max(0.04f, m_startButtonPressRadius) - dist);
+            var travel = Mathf.Clamp(penetration, 0f, maxTravel);
 
-            // Animate the cap: pushed in toward the wall (+z) while a hand rests on it.
-            var target = pressed ? m_startButtonCapRestPosition + new Vector3(0f, 0f, 0.022f) : m_startButtonCapRestPosition;
-            m_startButtonCap.localPosition = Vector3.MoveTowards(m_startButtonCap.localPosition, target, 0.5f * Time.deltaTime);
+            // Push the cap inward (+z toward the wall) proportional to how far the hand has pushed in.
+            var target = m_startButtonCapRestPosition + new Vector3(0f, 0f, travel);
+            m_startButtonCap.localPosition = Vector3.MoveTowards(m_startButtonCap.localPosition, target, 0.6f * Time.deltaTime);
 
-            if (!pressed)
+            // Re-arm once the hand pulls back out of the button.
+            if (penetration <= 0f)
             {
                 m_startButtonArmed = true;
                 return;
             }
 
-            // Fire once per touch; locked mid-round so the player can't reshuffle what is shuffled.
-            if (m_startButtonArmed && m_phase != SimulationPhase.Playing)
+            // Fire once when mashed in past the threshold (not on first contact), never mid-round.
+            if (m_startButtonArmed && travel >= fireTravel && m_phase != SimulationPhase.Playing)
             {
                 m_startButtonArmed = false;
-                PulseHaptic(rightNear ? OVRInput.Controller.RTouch : OVRInput.Controller.LTouch, 0.5f, 0.5f, 0.08f);
+                PulseHaptic(nearController, 0.6f, 0.5f, 0.1f);
                 StartSimulation();
             }
         }
 
-        private bool IsControllerNearStartButton(Transform anchor)
+        // Nearest distance from either hand (the Mixamo fingertip when the rig is up, else the
+        // controller anchor) to the START cap. Outputs which controller is nearest for haptics.
+        private float NearestHandDistanceToStart(out OVRInput.Controller nearController)
         {
-            return anchor != null && m_startButtonCap != null
-                && Vector3.Distance(anchor.position, m_startButtonCap.position) <= Mathf.Max(0.04f, m_startButtonPressRadius);
+            nearController = OVRInput.Controller.RTouch;
+            if (m_cameraRig == null || m_startButtonCap == null)
+            {
+                return float.MaxValue;
+            }
+
+            var capPos = m_startButtonCap.position;
+            var best = float.MaxValue;
+            var rightPoint = StartHandPoint(false);
+            if (rightPoint.HasValue)
+            {
+                best = Vector3.Distance(rightPoint.Value, capPos);
+                nearController = OVRInput.Controller.RTouch;
+            }
+
+            var leftPoint = StartHandPoint(true);
+            if (leftPoint.HasValue)
+            {
+                var d = Vector3.Distance(leftPoint.Value, capPos);
+                if (d < best)
+                {
+                    best = d;
+                    nearController = OVRInput.Controller.LTouch;
+                }
+            }
+
+            return best;
+        }
+
+        private Vector3? StartHandPoint(bool left)
+        {
+            if (m_customArmRig != null && m_customArmRig.IsReady)
+            {
+                var bone = m_customArmRig.GetHandBone(left);
+                if (bone != null)
+                {
+                    return bone.position;
+                }
+            }
+
+            var anchor = left ? m_cameraRig.leftControllerAnchor : m_cameraRig.rightControllerAnchor;
+            return anchor != null ? anchor.position : (Vector3?)null;
         }
 
         private void RefreshStartButtonVisual()

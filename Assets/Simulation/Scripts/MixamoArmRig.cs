@@ -65,6 +65,9 @@ namespace SimJam.BarrelSimulator
             m_handCalibrated[1] = false;
         }
 
+        // The hand bone transform (0 = left, 1 = right) for fingertip-based interactions; may be null.
+        public Transform GetHandBone(bool left) => m_hand[left ? 0 : 1];
+
         public void Initialize(OVRCameraRig rig, GameObject armsInstance)
         {
             m_rig = rig;

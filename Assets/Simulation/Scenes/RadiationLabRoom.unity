@@ -212,7 +212,7 @@ MonoBehaviour:
   m_detectorHeldLocalEuler: {x: 55, y: 0, z: 0}
   m_maxTries: 2
   m_enableRoundTimer: 0
-  m_startButtonPressRadius: 0.1
+  m_startButtonPressRadius: 0.12
   m_guessRayLength: 12
   m_guessConeAngle: 16
   m_minBarrels: 24
