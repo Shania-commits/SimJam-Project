@@ -198,7 +198,7 @@ namespace SimJam.BarrelSimulator
         // Half-angle of the forgiving "aim cone" for submitting a guess: the player only needs to
         // point roughly at a drum, not pixel-perfectly. The closest-to-centre barrel within this
         // cone is the pick.
-        [SerializeField, Range(4f, 35f)] private float m_guessConeAngle = 16f;
+        [SerializeField, Range(4f, 35f)] private float m_guessConeAngle = 24f; // forgiving "general area" aim
 
         [Header("Scenario randomization")]
         [SerializeField, Min(1)] private int m_minBarrels = 11;

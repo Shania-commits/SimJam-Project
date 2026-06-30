@@ -63,7 +63,7 @@ namespace SimJam.Tutorial
         [SerializeField] private Vector3 m_inertBarrelPosition = new Vector3(-2.8f, 0f, 0.3f);  // "DON'T SUBMIT"
         [SerializeField, Min(100f)] private float m_hotBarrelActivityCps = 6000f;
         [SerializeField, Min(0)] private int m_teachingSubmitStepIndex = 6;
-        [SerializeField, Range(4f, 35f)] private float m_teachingGuessConeAngle = 16f;
+        [SerializeField, Range(4f, 35f)] private float m_teachingGuessConeAngle = 24f; // forgiving "general area" aim
 
         [Header("Arms")]
         [SerializeField] private GameObject m_customArmsPrefab;
@@ -778,7 +778,7 @@ namespace SimJam.Tutorial
 
             var origin = m_detectorSensorTip.position;
             var direction = m_detectorRootTf.up;
-            const float maxDistance = 4f;
+            const float maxDistance = 12f; // match the lab's guess ray length so distance scanning works too
 
             GameObject best = null;
             var bestAngle = Mathf.Max(2f, m_teachingGuessConeAngle);
