@@ -21,7 +21,7 @@ namespace SimJam.BarrelSimulator
         // distance the cos-law solver pins the elbow to full extension). MaxReachFraction is a small
         // minimum-bend floor so a fully-stretched arm still reads slightly bent, never locked.
         public float TargetArmReach = 0.58f;
-        [Range(0.85f, 0.999f)] public float MaxReachFraction = 0.97f;
+        [Range(0.85f, 0.999f)] public float MaxReachFraction = 0.99f;
         public Vector3 ChestOffsetFromHead = new Vector3(0f, -0.16f, -0.05f);
         public Vector3 WristTargetLocalOffset = new Vector3(0f, -0.01f, -0.045f);
         public Vector3 ElbowPoleLocal = new Vector3(0.3f, -0.4f, -0.1f); // x mirrored per side, chest-yaw space

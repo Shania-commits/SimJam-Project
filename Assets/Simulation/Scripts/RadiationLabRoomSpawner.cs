@@ -145,7 +145,7 @@ namespace SimJam.BarrelSimulator
         [SerializeField, Range(-180f, 180f)] private float m_customArmsBodyYawOffset;
         // The arm rig is auto-scaled so its shoulder->wrist reach equals this (metres). Fixes a
         // mis-scaled FBX so the elbow can actually bend; raise it if the elbow still won't bend.
-        [SerializeField, Min(0.2f)] private float m_customArmsTargetReach = 0.58f;
+        [SerializeField, Min(0.2f)] private float m_customArmsTargetReach = 0.64f;
         [SerializeField, Range(0f, 130f)] private float m_customArmsFingerCurlAngle = 70f;
         [SerializeField] private Vector3 m_customArmsFingerCurlAxis = new Vector3(0f, 0f, 1f);
 

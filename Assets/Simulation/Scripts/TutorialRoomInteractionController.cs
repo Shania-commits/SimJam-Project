@@ -52,7 +52,7 @@ namespace SimJam.Tutorial
         // orientation (body yaw), elbow naturalness (target reach + elbow pole), and the wrist.
         [SerializeField] private Vector3 m_armsChestOffset = new Vector3(0f, -0.2f, -0.05f); // lower attach
         [SerializeField, Range(-180f, 180f)] private float m_armsBodyYawOffset;
-        [SerializeField, Min(0.2f)] private float m_armsTargetReach = 0.46f; // a bit smaller / skinnier
+        [SerializeField, Min(0.2f)] private float m_armsTargetReach = 0.64f; // sized so the IK arm reaches the controller (grab no longer floats)
         [SerializeField] private Vector3 m_armsElbowPole = new Vector3(0.3f, -0.4f, -0.1f);
         [SerializeField] private bool m_armsMatchHandToController = true;
         // Gentle finger curl on grab. MixamoArmRig now bends each bone around its own palm-ward axis
