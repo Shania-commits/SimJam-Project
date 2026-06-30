@@ -325,6 +325,7 @@ namespace SimJam.BarrelSimulator
         private Material m_startButtonMaterial;
         private Vector3 m_startButtonCapRestPosition;
         private bool m_startButtonArmed = true;
+        private bool m_startButtonTouching;
 
         private Vector3 m_currentTeleportTarget;
         private bool m_hasValidTeleportTarget;
@@ -1323,7 +1324,7 @@ namespace SimJam.BarrelSimulator
             housing.name = "Start Button Housing";
             housing.transform.SetParent(root.transform, false);
             housing.transform.localPosition = new Vector3(0f, 0f, 0.018f);
-            housing.transform.localScale = new Vector3(0.34f, 0.34f, 0.03f);
+            housing.transform.localScale = new Vector3(0.42f, 0.42f, 0.04f);
             AssignMaterial(housing, housingMaterial);
             DisableCollider(housing);
 
@@ -1338,12 +1339,14 @@ namespace SimJam.BarrelSimulator
             m_startButtonMaterial.name = "Start Button Cap";
             m_runtimeMaterials.Add(m_startButtonMaterial);
 
-            var cap = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            // Round arcade-style cap (a cylinder turned to face the player) the player mashes.
+            var cap = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             cap.name = "Start Button Cap";
             cap.transform.SetParent(root.transform, false);
-            m_startButtonCapRestPosition = new Vector3(0f, 0f, -0.045f); // protrudes toward the player (-z)
+            m_startButtonCapRestPosition = new Vector3(0f, 0f, -0.05f); // protrudes toward the player (-z)
             cap.transform.localPosition = m_startButtonCapRestPosition;
-            cap.transform.localScale = new Vector3(0.22f, 0.22f, 0.06f);
+            cap.transform.localRotation = Quaternion.Euler(90f, 0f, 0f); // round face toward player/wall
+            cap.transform.localScale = new Vector3(0.3f, 0.04f, 0.3f);   // dia 0.3 m, depth 0.08 m
             cap.GetComponent<Renderer>().sharedMaterial = m_startButtonMaterial;
             DisableCollider(cap);
             m_startButtonCap = cap.transform;
@@ -1352,7 +1355,7 @@ namespace SimJam.BarrelSimulator
             // head-locked hint convention: a viewer looking along +z reads the text correctly.
             var labelObject = new GameObject("Start Button Label");
             labelObject.transform.SetParent(root.transform, false);
-            labelObject.transform.localPosition = new Vector3(0f, 0f, -0.081f);
+            labelObject.transform.localPosition = new Vector3(0f, 0f, -0.1f);
             labelObject.transform.localRotation = Quaternion.identity;
             var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             m_startButtonLabel = labelObject.AddComponent<TextMesh>();
@@ -1360,7 +1363,7 @@ namespace SimJam.BarrelSimulator
             labelObject.GetComponent<MeshRenderer>().sharedMaterial = font.material;
             m_startButtonLabel.anchor = TextAnchor.MiddleCenter;
             m_startButtonLabel.alignment = TextAlignment.Center;
-            m_startButtonLabel.characterSize = 0.012f;
+            m_startButtonLabel.characterSize = 0.018f;
             m_startButtonLabel.fontSize = 96;
             m_startButtonLabel.color = Color.white;
             m_startButtonLabel.text = "START";
@@ -1390,7 +1393,15 @@ namespace SimJam.BarrelSimulator
             if (penetration <= 0f)
             {
                 m_startButtonArmed = true;
+                m_startButtonTouching = false;
                 return;
+            }
+
+            // Light haptic tick on first contact so the touch is felt (and a dead button is obvious).
+            if (!m_startButtonTouching)
+            {
+                m_startButtonTouching = true;
+                PulseHaptic(nearController, 0.3f, 0.3f, 0.03f);
             }
 
             // Fire once when mashed in past the threshold (not on first contact), never mid-round.
@@ -1412,7 +1423,8 @@ namespace SimJam.BarrelSimulator
                 return float.MaxValue;
             }
 
-            var capPos = m_startButtonCap.position;
+            // Measure to the cap's player-facing front face, not its centre (which is buried in the housing).
+            var capPos = m_startButtonCap.position - m_startButtonRoot.transform.forward * 0.04f;
             var best = float.MaxValue;
             var rightPoint = StartHandPoint(false);
             if (rightPoint.HasValue)
@@ -1437,17 +1449,10 @@ namespace SimJam.BarrelSimulator
 
         private Vector3? StartHandPoint(bool left)
         {
-            if (m_customArmRig != null && m_customArmRig.IsReady)
-            {
-                var bone = m_customArmRig.GetHandBone(left);
-                if (bone != null)
-                {
-                    return bone.position;
-                }
-            }
-
+            // Use the controller anchor (where the physical hand is) pushed forward to the fingertip,
+            // NOT the IK wrist bone (which sits ~15 cm behind the fingertip and never reaches the cap).
             var anchor = left ? m_cameraRig.leftControllerAnchor : m_cameraRig.rightControllerAnchor;
-            return anchor != null ? anchor.position : (Vector3?)null;
+            return anchor != null ? anchor.position + anchor.forward * 0.07f : (Vector3?)null;
         }
 
         private void RefreshStartButtonVisual()
