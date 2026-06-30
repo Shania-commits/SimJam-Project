@@ -233,12 +233,12 @@ MonoBehaviour:
   m_barrelClearance: 0.05
   m_wallShelfPrefab: {fileID: 0}
   m_shelfSurfaceClearance: 0.015
-  m_enableSmoothMove: 0
+  m_enableSmoothMove: 1
   m_enableTeleport: 1
   m_smoothMoveSpeed: 1.35
   m_snapTurnDegrees: 30
-  m_snapTurnCooldown: 0.3
-  m_thumbstickDeadzone: 0.22
+  m_snapTurnCooldown: 0.35
+  m_thumbstickDeadzone: 0.18
   m_edgeMargin: 0.2
   m_teleportSnapStep: 0.12
   m_maxTeleportDistance: 16
