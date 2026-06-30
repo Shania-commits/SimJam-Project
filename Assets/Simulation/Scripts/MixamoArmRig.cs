@@ -22,6 +22,12 @@ namespace SimJam.BarrelSimulator
         // minimum-bend floor so a fully-stretched arm still reads slightly bent, never locked.
         public float TargetArmReach = 0.58f;
         [Range(0.85f, 0.999f)] public float MaxReachFraction = 0.99f;
+        // Max distance the shoulder may slide toward the controller when the target is beyond arm reach,
+        // so the wrist reaches the controller and a held tool stays in the hand instead of floating. This
+        // translates only the upper-arm bone, so the continuous shoulder skin stretches a little at the
+        // extreme -- kept small and gated to near-full extension (and the shoulder is usually below the VR
+        // field of view). 0 disables shoulder stretch entirely.
+        public float MaxShoulderStretch = 0.1f;
         public Vector3 ChestOffsetFromHead = new Vector3(0f, -0.16f, -0.05f);
         public Vector3 WristTargetLocalOffset = new Vector3(0f, -0.01f, -0.045f);
         public Vector3 ElbowPoleLocal = new Vector3(0.3f, -0.4f, -0.1f); // x mirrored per side, chest-yaw space
@@ -46,6 +52,7 @@ namespace SimJam.BarrelSimulator
         private readonly Transform[] m_hand = new Transform[2];
         private readonly float[] m_upperLen = new float[2];
         private readonly float[] m_foreLen = new float[2];
+        private readonly Vector3[] m_upperRestLocalPos = new Vector3[2];
         private readonly Vector3[] m_upperRestAxis = new Vector3[2];
         private readonly Vector3[] m_foreRestAxis = new Vector3[2];
         private readonly Quaternion[] m_handOffset = new Quaternion[2];
@@ -121,6 +128,7 @@ namespace SimJam.BarrelSimulator
                 {
                     m_upperLen[i] = Vector3.Distance(m_upperArm[i].position, m_foreArm[i].position);
                     m_foreLen[i] = Vector3.Distance(m_foreArm[i].position, m_hand[i].position);
+                    m_upperRestLocalPos[i] = m_upperArm[i].localPosition; // rest offset, to undo shoulder-stretch each frame
                     // Rest-pose local direction from each bone toward its child (axis-agnostic).
                     m_upperRestAxis[i] = m_upperArm[i].InverseTransformPoint(m_foreArm[i].position).normalized;
                     m_foreRestAxis[i] = m_foreArm[i].InverseTransformPoint(m_hand[i].position).normalized;
@@ -216,13 +224,34 @@ namespace SimJam.BarrelSimulator
 
         private void SolveArm(int i, float side, Transform anchor, Quaternion chestYaw)
         {
+            // Undo any previous-frame shoulder-stretch slide FIRST: body placement moves the model root
+            // but does NOT restore this bone's local position, so without this the slide would accumulate
+            // frame-over-frame and latch the shoulder permanently out of socket.
+            m_upperArm[i].localPosition = m_upperRestLocalPos[i];
             var shoulder = m_upperArm[i].position;                       // actual shoulder joint, post body-placement
             var target = anchor.position + anchor.rotation * WristTargetLocalOffset;
             var l1 = m_upperLen[i];
             var l2 = m_foreLen[i];
+            var maxReach = (l1 + l2) * MaxReachFraction;
+
+            // Stretch by SHOULDER TRANSLATION (VRIK / VRArmIK pattern): if the controller is farther than
+            // the arm can reach, slide the shoulder (and the whole arm below it) out toward the target so
+            // the wrist still meets the controller, instead of clamping the hand short -- which is what
+            // detaches a held tool (it floats in the gap) and over-extends/contorts the arm. Bone lengths
+            // are untouched (no bone scaling); the continuous shoulder skin stretches only slightly at the
+            // very extreme, so the cap is kept small. Non-cumulative: the localPosition restore at the top
+            // of SolveArm undoes the previous frame's slide before this recomputes it.
+            var reachVector = target - shoulder;
+            var reachDist = reachVector.magnitude;
+            if (MaxShoulderStretch > 0f && reachDist > maxReach && reachDist > 1e-4f)
+            {
+                var slide = Mathf.Min(reachDist - maxReach, MaxShoulderStretch);
+                m_upperArm[i].position += reachVector / reachDist * slide;
+                shoulder = m_upperArm[i].position;
+            }
 
             var toTarget = target - shoulder;
-            var dist = Mathf.Clamp(toTarget.magnitude, Mathf.Abs(l1 - l2) + 1e-4f, (l1 + l2) * MaxReachFraction);
+            var dist = Mathf.Clamp(toTarget.magnitude, Mathf.Abs(l1 - l2) + 1e-4f, maxReach);
             if (dist < 1e-4f)
             {
                 return;
