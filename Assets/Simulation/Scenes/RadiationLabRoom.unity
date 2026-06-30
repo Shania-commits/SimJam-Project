@@ -214,13 +214,13 @@ MonoBehaviour:
   m_startButtonPressRadius: 0.1
   m_guessRayLength: 12
   m_guessConeAngle: 16
-  m_minBarrels: 11
-  m_maxBarrels: 45
+  m_minBarrels: 24
+  m_maxBarrels: 70
   m_minTables: 0
   m_maxTables: 4
-  m_minShelfUnits: 2
-  m_maxShelfUnits: 9
-  m_layoutRetryCount: 10
+  m_minShelfUnits: 4
+  m_maxShelfUnits: 14
+  m_layoutRetryCount: 24
   m_useFixedSeed: 0
   m_fixedSeed: 12345
   m_playerClearance: 0.8
