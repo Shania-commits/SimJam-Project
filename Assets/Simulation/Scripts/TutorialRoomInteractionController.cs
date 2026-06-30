@@ -49,6 +49,9 @@ namespace SimJam.Tutorial
         // procedural DetectorModelBuilder wand.
         [SerializeField] private GameObject m_detectorPrefab;
         [SerializeField, Min(0.05f)] private float m_detectorTargetHeight = 0.25f;
+        // Held pose mirrors the lab's so the tutorial grip matches (defaults equal GrabbableTool's).
+        [SerializeField] private Vector3 m_detectorHeldLocalPosition = new Vector3(0f, 0.040f, 0.065f);
+        [SerializeField] private Vector3 m_detectorHeldLocalEuler = new Vector3(55f, 0f, 0f);
 
         [Header("Arms")]
         [SerializeField] private GameObject m_customArmsPrefab;
@@ -477,6 +480,8 @@ namespace SimJam.Tutorial
 
             m_detectorGrabTool = detectorRoot.AddComponent<GrabbableTool>();
             m_detectorGrabTool.Initialize(m_cameraRig, m_detectorGrabRadius);
+            m_detectorGrabTool.HeldLocalPosition = m_detectorHeldLocalPosition;
+            m_detectorGrabTool.HeldLocalEuler = m_detectorHeldLocalEuler;
             m_detectorGrabTool.FlipHeldAboutAim = true; // screen faces the player when held
             m_detectorGrabTool.Grabbed += MarkDetectorGrabbed;
             // Re-calibrate the arm rig's wrist twist on grab/release so the hand doesn't twist.
