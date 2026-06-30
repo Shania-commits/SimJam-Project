@@ -93,7 +93,6 @@ namespace SimJam.Tutorial
         private Transform m_detectorSensorTip;
         private GameObject m_hotBarrel;
         private GameObject m_inertBarrel;
-        private RadiationSource m_teachingHotSource;
         private Transform m_hotLabel;
         private Transform m_inertLabel;
         private bool m_teachingSolved;
@@ -134,7 +133,6 @@ namespace SimJam.Tutorial
         private void Start()
         {
             ResolvePlayerReferences();
-            ConfigureTutorialRadiationSources();
 
             if (m_spawnWorkingDetector)
             {
@@ -377,6 +375,11 @@ namespace SimJam.Tutorial
 
             if (m_uiPointer != null && m_uiPointer.IsHoveringClickable)
             {
+                if (m_teleportMarker != null)
+                {
+                    m_teleportMarker.SetActive(false);
+                }
+
                 return;
             }
 
@@ -406,6 +409,7 @@ namespace SimJam.Tutorial
         private void UpdateTeleportTarget()
         {
             EnsureTeleportMarker();
+            m_teleportMarker.SetActive(true);
 
             var ray = GetTeleportRay();
             var floor = new Plane(Vector3.up, Vector3.zero);
@@ -574,8 +578,7 @@ namespace SimJam.Tutorial
 
             // Named "Drum" (not "Barrel") so the dresser's legacy-barrel hide pass never disables them.
             m_hotBarrel = CreateTeachingBarrel("Tutorial Hot Drum (SUBMIT)", m_hotBarrelPosition);
-            m_teachingHotSource = m_hotBarrel.AddComponent<RadiationSource>();
-            m_teachingHotSource.Configure(m_hotBarrelActivityCps, "Cs-137");
+            m_hotBarrel.AddComponent<RadiationSource>().Configure(m_hotBarrelActivityCps, "Cs-137");
             m_hotLabel = CreateBarrelLabel(m_hotBarrel, "SUBMIT THIS", new Color(0.30f, 1f, 0.45f));
 
             m_inertBarrel = CreateTeachingBarrel("Tutorial Inert Drum", m_inertBarrelPosition);
@@ -714,8 +717,22 @@ namespace SimJam.Tutorial
         private void UpdateTeachingSubmit()
         {
             if (m_teachingSolved || m_tutorialManager == null
-                || !m_tutorialManager.IsCurrentStep(m_teachingSubmitStepIndex)
-                || !InputManager.IsButtonADownOrPinchStarted())
+                || !m_tutorialManager.IsCurrentStep(m_teachingSubmitStepIndex))
+            {
+                return;
+            }
+
+#if UNITY_EDITOR && ENABLE_INPUT_SYSTEM
+            // Editor flat-mode fallback: N completes the submit step without a held/aimed detector.
+            if (Keyboard.current != null && Keyboard.current.nKey.wasPressedThisFrame)
+            {
+                m_teachingSolved = true;
+                m_tutorialManager.CompleteStepIfCurrent(m_teachingSubmitStepIndex);
+                return;
+            }
+#endif
+
+            if (!InputManager.IsButtonADownOrPinchStarted())
             {
                 return;
             }
@@ -815,29 +832,6 @@ namespace SimJam.Tutorial
             if (m_detectorWasGrabbed && m_detector != null && m_detector.SmoothedCps >= m_detectorCompletionCps)
             {
                 CompleteDetectorStep();
-            }
-        }
-
-        private void ConfigureTutorialRadiationSources()
-        {
-            var barrelObjects = GameObject.FindObjectsByType<Transform>(FindObjectsInactive.Exclude);
-            var sourceIndex = 0;
-            for (var i = 0; i < barrelObjects.Length; i++)
-            {
-                var barrel = barrelObjects[i];
-                if (barrel == null || !barrel.name.Contains("Floor Barrel"))
-                {
-                    continue;
-                }
-
-                var source = barrel.GetComponent<RadiationSource>();
-                if (source == null)
-                {
-                    source = barrel.gameObject.AddComponent<RadiationSource>();
-                }
-
-                source.Configure(1500f + sourceIndex * 650f, "Tutorial Source");
-                sourceIndex++;
             }
         }
 

@@ -496,6 +496,12 @@ namespace SimJam.Tutorial
             });
             m_steps.Add(new TutorialStep
             {
+                title = "Tutorial: Submit a Reading",
+                caption = "Scan BOTH barrels with the detector. One reads far higher than the other.\n\nWalk up to each barrel, then aim at the HOT one (SUBMIT THIS) and press the A button (or pinch) to submit.",
+                requireCompletionToContinue = true
+            });
+            m_steps.Add(new TutorialStep
+            {
                 title = "Tutorial Complete",
                 caption = "You have completed the basic inspection tutorial.\n\nReview the mission briefing before entering the container inspection room.",
                 nextButtonLabel = "Mission Briefing"

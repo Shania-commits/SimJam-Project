@@ -38,6 +38,7 @@ namespace SimJam.BarrelSimulator
         // Fingers curl from rest toward a closed fist as the grip trigger is squeezed. The curl axis
         // is the per-finger-bone local bend axis — Mixamo's varies, so it is tunable if curl looks off.
         [Range(0f, 130f)] public float FingerCurlAngle = 70f;
+        // Legacy fallback axis -- unused by the current knuckle-line curl (kept for Inspector compat).
         public Vector3 FingerCurlAxis = new Vector3(0f, 0f, 1f);
         // Flip to -1 if the fingers curl backward (away from the palm) on a given FBX.
         public float FingerCurlSign = 1f;
