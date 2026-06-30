@@ -39,13 +39,23 @@ namespace SimJam
         private bool m_loading;
         private bool m_panelAnchored;
         private Vector3 m_anchorPosition;
+        private MovementMode m_selectedMode = MovementMode.Unset;
+        private Button m_locomotionButton;
+        private Button m_teleportButton;
+        private Button m_continueButton;
 
         private void Start()
         {
+            BuildPlayRoom();
             BuildUi();
             if (FindAnyObjectByType<VrUiPointer>() == null)
             {
                 gameObject.AddComponent<VrUiPointer>();
+            }
+
+            if (FindAnyObjectByType<StartRoomLocomotion>() == null)
+            {
+                gameObject.AddComponent<StartRoomLocomotion>().Configure(new Vector2(4f, 4f));
             }
         }
 
@@ -56,9 +66,18 @@ namespace SimJam
 
         private void Update()
         {
-            // Start is via the controller laser clicking the Start button (VrUiPointer); the keyboard
-            // key is the editor desktop fallback only.
-            if (!m_loading && WasStartKeyPressed())
+#if UNITY_EDITOR && ENABLE_INPUT_SYSTEM
+            // Editor desktop fallback: 1 picks locomotion, 2 picks teleportation (no VR controller).
+            if (Keyboard.current != null)
+            {
+                if (Keyboard.current.digit1Key.wasPressedThisFrame) SelectMode(MovementMode.Smooth);
+                if (Keyboard.current.digit2Key.wasPressedThisFrame) SelectMode(MovementMode.Teleport);
+            }
+#endif
+
+            // Continue is via the controller laser clicking the gated Continue button (VrUiPointer); the
+            // keyboard key is the editor desktop fallback only and also requires a mode pick first.
+            if (!m_loading && m_selectedMode != MovementMode.Unset && WasStartKeyPressed())
             {
                 StartGame();
             }
@@ -80,11 +99,12 @@ namespace SimJam
 
         public void StartGame()
         {
-            if (m_loading || string.IsNullOrWhiteSpace(m_sceneToLoad))
+            if (m_loading || m_selectedMode == MovementMode.Unset || string.IsNullOrWhiteSpace(m_sceneToLoad))
             {
                 return;
             }
 
+            MovementPreference.Save(m_selectedMode);
             m_loading = true;
             StartCoroutine(FadeOutAndLoad());
         }
@@ -133,11 +153,23 @@ namespace SimJam
             backgroundImage.color = m_backgroundSprite != null ? Color.white : new Color(0.03f, 0.035f, 0.035f, 0.96f);
             backgroundImage.raycastTarget = false;
 
-            var title = CreateText(panel, "Title", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -120f), new Vector2(820f, 130f), 52f);
+            var title = CreateText(panel, "Title", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -64f), new Vector2(880f, 96f), 46f);
             title.text = m_titleText;
 
-            var button = CreateButton(panel, "Start Button", m_startButtonLabel, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -70f), new Vector2(320f, 96f), 40f);
-            button.onClick.AddListener(StartGame);
+            var instructions = CreateText(panel, "Instructions", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -188f), new Vector2(880f, 150f), 28f);
+            instructions.text = "Walk around this room and try both movement styles.\n" +
+                                 "Left stick to walk  -  right INDEX (front) trigger to teleport.\n" +
+                                 "Pick whichever feels best, then Continue.";
+
+            m_locomotionButton = CreateButton(panel, "Locomotion Button", "Locomotion\n(walk)", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-180f, -10f), new Vector2(330f, 120f), 30f);
+            m_locomotionButton.onClick.AddListener(() => SelectMode(MovementMode.Smooth));
+
+            m_teleportButton = CreateButton(panel, "Teleport Button", "Teleportation\n(trigger)", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(180f, -10f), new Vector2(330f, 120f), 30f);
+            m_teleportButton.onClick.AddListener(() => SelectMode(MovementMode.Teleport));
+
+            m_continueButton = CreateButton(panel, "Continue Button", "Continue", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 64f), new Vector2(330f, 92f), 38f);
+            m_continueButton.onClick.AddListener(StartGame);
+            m_continueButton.interactable = false;
 
             UpdatePanelPose();
         }
@@ -182,6 +214,78 @@ namespace SimJam
             {
                 m_canvas.transform.rotation = Quaternion.LookRotation(toPanel.normalized, Vector3.up);
             }
+        }
+
+        private void SelectMode(MovementMode mode)
+        {
+            m_selectedMode = mode;
+            if (m_continueButton != null)
+            {
+                m_continueButton.interactable = true;
+            }
+
+            TintModeButton(m_locomotionButton, mode == MovementMode.Smooth);
+            TintModeButton(m_teleportButton, mode == MovementMode.Teleport);
+        }
+
+        private static void TintModeButton(Button button, bool selected)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            var colors = button.colors;
+            colors.normalColor = selected ? new Color(0.13f, 0.62f, 0.32f, 1f) : new Color(0.04f, 0.24f, 0.52f, 0.95f);
+            colors.selectedColor = colors.normalColor;
+            button.colors = colors;
+        }
+
+        private void BuildPlayRoom()
+        {
+            var roomRoot = new GameObject("Start Play Room");
+            roomRoot.transform.SetParent(transform, false);
+
+            var floorMat = CreateRoomMaterial("Start Floor Mat", new Color(0.34f, 0.36f, 0.40f));
+            var wallMat = CreateRoomMaterial("Start Wall Mat", new Color(0.46f, 0.48f, 0.52f));
+
+            const float half = 4f;        // 8 x 8 m room
+            const float wallHeight = 2.7f;
+            const float wallThick = 0.15f;
+
+            CreateRoomCube(roomRoot.transform, "Start Floor", new Vector3(0f, -0.05f, 0f), new Vector3(half * 2f, 0.1f, half * 2f), floorMat);
+            CreateRoomCube(roomRoot.transform, "Start Wall North", new Vector3(0f, wallHeight * 0.5f, half), new Vector3(half * 2f, wallHeight, wallThick), wallMat);
+            CreateRoomCube(roomRoot.transform, "Start Wall South", new Vector3(0f, wallHeight * 0.5f, -half), new Vector3(half * 2f, wallHeight, wallThick), wallMat);
+            CreateRoomCube(roomRoot.transform, "Start Wall East", new Vector3(half, wallHeight * 0.5f, 0f), new Vector3(wallThick, wallHeight, half * 2f), wallMat);
+            CreateRoomCube(roomRoot.transform, "Start Wall West", new Vector3(-half, wallHeight * 0.5f, 0f), new Vector3(wallThick, wallHeight, half * 2f), wallMat);
+
+            if (FindAnyObjectByType<Light>() == null)
+            {
+                var lightObject = new GameObject("Start Room Light");
+                lightObject.transform.SetParent(roomRoot.transform, false);
+                lightObject.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
+                var directional = lightObject.AddComponent<Light>();
+                directional.type = LightType.Directional;
+                directional.intensity = 1.1f;
+                directional.color = new Color(1f, 0.97f, 0.92f);
+            }
+        }
+
+        private static Material CreateRoomMaterial(string materialName, Color color)
+        {
+            var material = new Material(Shader.Find("Standard")) { name = materialName, color = color };
+            material.SetFloat("_Glossiness", 0.2f);
+            return material;
+        }
+
+        private static void CreateRoomCube(Transform parent, string objectName, Vector3 localPosition, Vector3 localScale, Material material)
+        {
+            var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            cube.name = objectName;
+            cube.transform.SetParent(parent, false);
+            cube.transform.localPosition = localPosition;
+            cube.transform.localScale = localScale;
+            cube.GetComponent<MeshRenderer>().sharedMaterial = material;
         }
 
         private static RectTransform CreateRect(Transform parent, string objectName, Vector2 anchorMin, Vector2 anchorMax, Vector2 anchoredPosition, Vector2 size)

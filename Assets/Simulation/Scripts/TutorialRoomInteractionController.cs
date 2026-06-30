@@ -101,12 +101,32 @@ namespace SimJam.Tutorial
 
         private void Awake()
         {
+            ApplyMovementPreference();
+
             if (m_tutorialManager == null)
             {
                 m_tutorialManager = GetComponent<TutorialManager>();
             }
 
             ResolvePlayerReferences();
+        }
+
+        // Apply the movement style chosen on the start screen (persisted via PlayerPrefs). If no choice
+        // was recorded (e.g. this scene launched directly in-editor), keep the serialized flags. Snap
+        // turn is left unchanged in both modes.
+        private void ApplyMovementPreference()
+        {
+            var mode = MovementPreference.Load();
+            if (mode == MovementMode.Smooth)
+            {
+                m_enableSmoothMove = true;
+                m_enableTeleport = false;
+            }
+            else if (mode == MovementMode.Teleport)
+            {
+                m_enableSmoothMove = false;
+                m_enableTeleport = true;
+            }
         }
 
         private void Start()

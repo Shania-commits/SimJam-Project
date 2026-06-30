@@ -375,8 +375,27 @@ namespace SimJam.BarrelSimulator
             m_cameraTransform = EnsureCameraRig();
         }
 
+        // Apply the movement style chosen on the start screen (persisted via PlayerPrefs). If no choice
+        // was recorded (e.g. this scene launched directly), keep the serialized flags. Snap turn in the
+        // lab is unconditional, so it stays on either way.
+        private void ApplyMovementPreference()
+        {
+            var mode = MovementPreference.Load();
+            if (mode == MovementMode.Smooth)
+            {
+                m_enableSmoothMove = true;
+                m_enableTeleport = false;
+            }
+            else if (mode == MovementMode.Teleport)
+            {
+                m_enableSmoothMove = false;
+                m_enableTeleport = true;
+            }
+        }
+
         private void Start()
         {
+            ApplyMovementPreference();
             ConfigureAmbientLighting();
             EnsureScreenFade();
 
