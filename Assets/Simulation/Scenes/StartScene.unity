@@ -739,8 +739,6 @@ MonoBehaviour:
   m_sceneToLoad: TutorialRoom
   m_backgroundSprite: {fileID: 21300000, guid: d3fc9252da79c274aaafcf9a69682bb3, type: 3}
   m_buttonSprite: {fileID: 21300000, guid: f066f0fae75ea9343a597345ed30714e, type: 3}
-  m_panelDistance: 2.2
-  m_panelVerticalOffset: 0
   m_panelSize: {x: 960, y: 540}
   m_worldSpaceScale: 0.00225
   m_transitionFadeSeconds: 0.6
