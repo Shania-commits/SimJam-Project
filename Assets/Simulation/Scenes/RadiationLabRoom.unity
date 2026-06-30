@@ -167,7 +167,7 @@ MonoBehaviour:
   m_playerStartPosition: {x: 0, y: 0, z: -5.536}
   m_defaultEyeHeight: 1.6
   m_buildRoomGeometry: 1
-  m_roomSizeFeet: {x: 50, y: 50}
+  m_roomSizeFeet: {x: 42, y: 42}
   m_spawnRoomSizeFeet: {x: 20, y: 20}
   m_wallHeight: 2.75
   m_wallThickness: 0.1
@@ -215,7 +215,7 @@ MonoBehaviour:
   m_startButtonPressRadius: 0.09
   m_guessRayLength: 12
   m_guessConeAngle: 16
-  m_minBarrels: 40
+  m_minBarrels: 60
   m_maxBarrels: 120
   m_minTables: 2
   m_maxTables: 8

@@ -1190,6 +1190,7 @@ namespace SimJam.BarrelSimulator
             m_detectorGrabTool.Initialize(m_cameraRig, m_detectorGrabRadius);
             m_detectorGrabTool.HeldLocalPosition = m_detectorHeldLocalPosition;
             m_detectorGrabTool.HeldLocalEuler = m_detectorHeldLocalEuler;
+            m_detectorGrabTool.FlipHeldAboutAim = true; // screen faces the player when held
             // Re-calibrate the arm rig's wrist twist when the detector is grabbed/released so the hand
             // doesn't twist (the offset is otherwise latched once in the relaxed startup pose).
             m_detectorGrabTool.Grabbed += OnDetectorGrabChanged;
