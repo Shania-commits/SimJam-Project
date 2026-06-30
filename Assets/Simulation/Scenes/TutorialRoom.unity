@@ -15581,6 +15581,24 @@ MonoBehaviour:
     onStepCompleted:
       m_PersistentCalls:
         m_Calls: []
+  - title: 'Tutorial: Submit a Reading'
+    caption: 'Scan BOTH barrels with the detector. One reads near zero (inert), one
+      spikes high.
+
+
+      Point the detector at the HOT barrel (SUBMIT THIS) and press the A button (or
+      pinch) to submit -- the same control you will use in the mission.'
+    backgroundImage: {fileID: 0}
+    nextButtonLabel: Continue
+    canGoBack: 1
+    canPause: 1
+    requireCompletionToContinue: 1
+    onStepStarted:
+      m_PersistentCalls:
+        m_Calls: []
+    onStepCompleted:
+      m_PersistentCalls:
+        m_Calls: []
   - title: Tutorial Complete
     caption: 'You have completed the basic inspection tutorial.
 
@@ -15715,6 +15733,8 @@ MonoBehaviour:
   m_customArmsPrefab: {fileID: 919132149155446097, guid: 38a4119925ba1ea458807788b731ec55, type: 3}
   m_detectorPrefab: {fileID: 4443030164341006770, guid: b669ee183dedb2647b0e304bbfe282cb, type: 3}
   m_detectorTargetHeight: 0.25
+  m_teachingBarrelPrefab: {fileID: 919132149155446097, guid: e6b7b26d2cee53e4da56fa1e9ad5bc18, type: 3}
+  m_teachingSubmitStepIndex: 6
 --- !u!1 &2145739001
 GameObject:
   m_ObjectHideFlags: 0

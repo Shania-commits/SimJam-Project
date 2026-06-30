@@ -53,6 +53,16 @@ namespace SimJam.Tutorial
         [SerializeField] private Vector3 m_detectorHeldLocalPosition = new Vector3(0f, 0.040f, 0.065f);
         [SerializeField] private Vector3 m_detectorHeldLocalEuler = new Vector3(55f, 0f, 0f);
 
+        [Header("Teaching Barrels")]
+        // Two barrels (one inert, one radioactive) the player scans + submits to practice the real
+        // find-and-submit loop. Assign the lab's 55-gal barrel model so they match the mission barrels.
+        [SerializeField] private GameObject m_teachingBarrelPrefab;
+        [SerializeField] private Vector3 m_hotBarrelPosition = new Vector3(-1.1f, 0f, -1.5f);    // "SUBMIT THIS"
+        [SerializeField] private Vector3 m_inertBarrelPosition = new Vector3(-3.4f, 0f, -1.5f);  // "DON'T SUBMIT"
+        [SerializeField, Min(100f)] private float m_hotBarrelActivityCps = 8000f;
+        [SerializeField, Min(0)] private int m_teachingSubmitStepIndex = 6;
+        [SerializeField, Range(4f, 35f)] private float m_teachingGuessConeAngle = 16f;
+
         [Header("Arms")]
         [SerializeField] private GameObject m_customArmsPrefab;
         // Arm IK tunables (defaults match the lab rig). Adjust in the Inspector + re-Play to dial
@@ -77,6 +87,14 @@ namespace SimJam.Tutorial
         private GrabbableTool m_detectorGrabTool;
         private RadiationDetector m_detector;
         private VrUiPointer m_uiPointer;
+        private Transform m_detectorRootTf;
+        private Transform m_detectorSensorTip;
+        private GameObject m_hotBarrel;
+        private GameObject m_inertBarrel;
+        private RadiationSource m_teachingHotSource;
+        private Transform m_hotLabel;
+        private Transform m_inertLabel;
+        private bool m_teachingSolved;
         private bool m_detectorWasGrabbed;
         private GameObject m_customArmsInstance;
         private MixamoArmRig m_customArmRig;
@@ -101,6 +119,7 @@ namespace SimJam.Tutorial
                 SpawnWorkingDetector();
             }
 
+            SpawnTeachingBarrels();
             EnsureCustomArms();
         }
 
@@ -111,6 +130,8 @@ namespace SimJam.Tutorial
             UpdateMovement();
             UpdateTeleport();
             UpdateDetectorCompletion();
+            UpdateTeachingSubmit();
+            BillboardTeachingLabels();
         }
 
         private void ResolvePlayerReferences()
@@ -490,6 +511,8 @@ namespace SimJam.Tutorial
 
             detectorRoot.name = "Tutorial Working IdentiFINDER";
             detectorRoot.transform.SetPositionAndRotation(m_detectorHomePosition, Quaternion.Euler(m_detectorHomeEuler));
+            m_detectorRootTf = detectorRoot.transform;
+            m_detectorSensorTip = sensorTip;
 
             m_detectorGrabTool = detectorRoot.AddComponent<GrabbableTool>();
             m_detectorGrabTool.Initialize(m_cameraRig, m_detectorGrabRadius);
@@ -511,6 +534,222 @@ namespace SimJam.Tutorial
             {
                 detectorRoot.AddComponent<DetectorScreenBinder>().Bind(m_detector, screenSource);
             }
+        }
+
+        private void SpawnTeachingBarrels()
+        {
+            if (m_hotBarrel != null || m_inertBarrel != null)
+            {
+                return;
+            }
+
+            m_hotBarrel = CreateTeachingBarrel("Tutorial Hot Barrel (SUBMIT)", m_hotBarrelPosition);
+            m_teachingHotSource = m_hotBarrel.AddComponent<RadiationSource>();
+            m_teachingHotSource.Configure(m_hotBarrelActivityCps, "Cs-137");
+            m_hotLabel = CreateBarrelLabel(m_hotBarrel, "SUBMIT THIS", new Color(0.30f, 1f, 0.45f));
+
+            m_inertBarrel = CreateTeachingBarrel("Tutorial Inert Barrel", m_inertBarrelPosition);
+            m_inertLabel = CreateBarrelLabel(m_inertBarrel, "DON'T SUBMIT", new Color(1f, 0.42f, 0.36f));
+        }
+
+        // One barrel matching the lab's 55-gal drum (same model + same approximate collider), on the floor.
+        private GameObject CreateTeachingBarrel(string objectName, Vector3 floorPosition)
+        {
+            GameObject barrel = m_teachingBarrelPrefab != null
+                ? Instantiate(m_teachingBarrelPrefab)
+                : GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            barrel.name = objectName;
+            barrel.transform.SetParent(transform, true);
+            barrel.transform.SetPositionAndRotation(floorPosition, Quaternion.identity);
+            FitTeachingBarrel(barrel);
+            EnsureLabBarrelCollider(barrel);
+            return barrel;
+        }
+
+        // Uniform-fit the model to ~0.9 m tall (the 55-gal height) so it matches the lab barrels.
+        private static void FitTeachingBarrel(GameObject barrel)
+        {
+            const float targetHeight = 0.9f;
+            if (TryGetBarrelBounds(barrel, out var bounds) && bounds.size.y > 1e-4f)
+            {
+                barrel.transform.localScale *= targetHeight / bounds.size.y;
+            }
+            else
+            {
+                barrel.transform.localScale = new Vector3(0.58f, targetHeight * 0.5f, 0.58f);
+            }
+        }
+
+        // The same collider the lab gives its barrels (EnsureApproximateCollider, 55-gal spec): a
+        // BoxCollider sized 0.58 x 0.9 x 0.58 in world space, centered on the mesh. Skipped if the
+        // prefab already ships a collider (then the teaching barrel uses the prefab's, like the lab).
+        private static void EnsureLabBarrelCollider(GameObject barrel)
+        {
+            if (barrel.GetComponentInChildren<Collider>() != null)
+            {
+                return;
+            }
+
+            const float diameter = 0.58f;
+            const float height = 0.9f;
+            var box = barrel.AddComponent<BoxCollider>();
+            var s = barrel.transform.lossyScale;
+            s.x = Mathf.Approximately(s.x, 0f) ? 1f : s.x;
+            s.y = Mathf.Approximately(s.y, 0f) ? 1f : s.y;
+            s.z = Mathf.Approximately(s.z, 0f) ? 1f : s.z;
+            box.size = new Vector3(diameter / s.x, height / s.y, diameter / s.z);
+            if (TryGetBarrelBounds(barrel, out var bounds))
+            {
+                box.center = barrel.transform.InverseTransformPoint(bounds.center);
+            }
+        }
+
+        private static bool TryGetBarrelBounds(GameObject root, out Bounds bounds)
+        {
+            bounds = default;
+            var has = false;
+            foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
+            {
+                if (renderer == null)
+                {
+                    continue;
+                }
+
+                if (!has)
+                {
+                    bounds = renderer.bounds;
+                    has = true;
+                }
+                else
+                {
+                    bounds.Encapsulate(renderer.bounds);
+                }
+            }
+
+            return has;
+        }
+
+        // Floating text above a barrel (parented to the room so it stays unscaled + readable).
+        private Transform CreateBarrelLabel(GameObject barrel, string text, Color color)
+        {
+            var labelObject = new GameObject(barrel.name + " Label");
+            labelObject.transform.SetParent(transform, false);
+            labelObject.transform.position = barrel.transform.position + new Vector3(0f, 1.25f, 0f);
+
+            var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            var label = labelObject.AddComponent<TextMesh>();
+            label.font = font;
+            labelObject.GetComponent<MeshRenderer>().sharedMaterial = font.material;
+            label.text = text;
+            label.color = color;
+            label.fontSize = 64;
+            label.characterSize = 0.012f;
+            label.anchor = TextAnchor.MiddleCenter;
+            label.alignment = TextAlignment.Center;
+            return labelObject.transform;
+        }
+
+        private void BillboardTeachingLabels()
+        {
+            FaceCamera(m_hotLabel);
+            FaceCamera(m_inertLabel);
+        }
+
+        private void FaceCamera(Transform label)
+        {
+            if (label == null || m_cameraTransform == null)
+            {
+                return;
+            }
+
+            var toLabel = label.position - m_cameraTransform.position;
+            if (toLabel.sqrMagnitude > 1e-6f)
+            {
+                label.rotation = Quaternion.LookRotation(toLabel);
+            }
+        }
+
+        // Submit (A button / pinch, the SAME control as the lab) aimed at the HOT barrel completes the
+        // teaching step. Only active while that step is current and until solved once.
+        private void UpdateTeachingSubmit()
+        {
+            if (m_teachingSolved || m_tutorialManager == null
+                || !m_tutorialManager.IsCurrentStep(m_teachingSubmitStepIndex)
+                || !InputManager.IsButtonADownOrPinchStarted())
+            {
+                return;
+            }
+
+            var aimed = GetTeachingAimedBarrel();
+            if (aimed != null && aimed == m_hotBarrel)
+            {
+                m_teachingSolved = true;
+                m_tutorialManager.CompleteStepIfCurrent(m_teachingSubmitStepIndex);
+                if (m_hotLabel != null)
+                {
+                    var tm = m_hotLabel.GetComponent<TextMesh>();
+                    if (tm != null)
+                    {
+                        tm.text = "SUBMITTED";
+                    }
+                }
+            }
+        }
+
+        // Lightweight aim test scoped to the two teaching barrels (cone from the detector sensor tip
+        // along the detector's aim axis, with a dead-on raycast fallback). Mirrors the lab's GetAimedBarrel.
+        private GameObject GetTeachingAimedBarrel()
+        {
+            if (m_detectorGrabTool == null || !m_detectorGrabTool.IsHeld
+                || m_detectorSensorTip == null || m_detectorRootTf == null)
+            {
+                return null;
+            }
+
+            var origin = m_detectorSensorTip.position;
+            var direction = m_detectorRootTf.up;
+            const float maxDistance = 4f;
+
+            GameObject best = null;
+            var bestAngle = Mathf.Max(2f, m_teachingGuessConeAngle);
+            foreach (var barrel in new[] { m_hotBarrel, m_inertBarrel })
+            {
+                if (barrel == null)
+                {
+                    continue;
+                }
+
+                var barrelCollider = barrel.GetComponentInChildren<Collider>();
+                var center = barrelCollider != null ? barrelCollider.bounds.center : barrel.transform.position;
+                var toBarrel = center - origin;
+                var distance = toBarrel.magnitude;
+                if (distance < 1e-3f || distance > maxDistance)
+                {
+                    continue;
+                }
+
+                var angle = Vector3.Angle(direction, toBarrel);
+                if (angle < bestAngle)
+                {
+                    bestAngle = angle;
+                    best = barrel;
+                }
+            }
+
+            if (best == null && Physics.Raycast(origin, direction, out var hit, maxDistance, ~0, QueryTriggerInteraction.Ignore))
+            {
+                var t = hit.collider.transform;
+                if (m_hotBarrel != null && t.IsChildOf(m_hotBarrel.transform))
+                {
+                    best = m_hotBarrel;
+                }
+                else if (m_inertBarrel != null && t.IsChildOf(m_inertBarrel.transform))
+                {
+                    best = m_inertBarrel;
+                }
+            }
+
+            return best;
         }
 
         private void MarkDetectorGrabbed()
