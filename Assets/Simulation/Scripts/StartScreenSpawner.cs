@@ -20,7 +20,6 @@ namespace SimJam
     {
         [Header("Content")]
         [SerializeField] private string m_titleText = "Radiation Detection Training";
-        [SerializeField] private string m_startButtonLabel = "Start";
         [SerializeField] private string m_sceneToLoad = "TutorialRoom";
 
         [Header("Shania UI art (assign BackgroundUI_Wide + Button_White)")]
