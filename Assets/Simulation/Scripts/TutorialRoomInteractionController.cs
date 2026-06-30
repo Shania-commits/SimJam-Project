@@ -45,6 +45,10 @@ namespace SimJam.Tutorial
         [SerializeField] private Vector3 m_detectorHomeEuler = new Vector3(0f, 98f, 90f);
         [SerializeField, Min(0.05f)] private float m_detectorGrabRadius = 0.18f;
         [SerializeField, Min(0f)] private float m_detectorCompletionCps = 3f;
+        // Use the lab's identiFINDER prefab (same model) when assigned; null falls back to the
+        // procedural DetectorModelBuilder wand.
+        [SerializeField] private GameObject m_detectorPrefab;
+        [SerializeField, Min(0.05f)] private float m_detectorTargetHeight = 0.25f;
 
         [Header("Arms")]
         [SerializeField] private GameObject m_customArmsPrefab;
@@ -446,11 +450,32 @@ namespace SimJam.Tutorial
                 return;
             }
 
-            var parts = DetectorModelBuilder.Build();
-            parts.Root.name = "Tutorial Working IdentiFINDER";
-            parts.Root.transform.SetPositionAndRotation(m_detectorHomePosition, Quaternion.Euler(m_detectorHomeEuler));
+            GameObject detectorRoot;
+            Transform sensorTip;
+            TextMesh legacyScreen;
+            GameObject screenSource;
+            if (m_detectorPrefab != null)
+            {
+                // Same identiFINDER as the lab (prefab model + world-space TMP screen).
+                var built = DetectorModelBuilder.BuildFromPrefab(m_detectorPrefab, m_detectorTargetHeight);
+                detectorRoot = built.Root;
+                sensorTip = built.SensorTip;
+                screenSource = built.ScreenSource;
+                legacyScreen = null;
+            }
+            else
+            {
+                var parts = DetectorModelBuilder.Build();
+                detectorRoot = parts.Root;
+                sensorTip = parts.SensorTip;
+                legacyScreen = parts.ScreenText;
+                screenSource = null;
+            }
 
-            m_detectorGrabTool = parts.Root.AddComponent<GrabbableTool>();
+            detectorRoot.name = "Tutorial Working IdentiFINDER";
+            detectorRoot.transform.SetPositionAndRotation(m_detectorHomePosition, Quaternion.Euler(m_detectorHomeEuler));
+
+            m_detectorGrabTool = detectorRoot.AddComponent<GrabbableTool>();
             m_detectorGrabTool.Initialize(m_cameraRig, m_detectorGrabRadius);
             m_detectorGrabTool.FlipHeldAboutAim = true; // screen faces the player when held
             m_detectorGrabTool.Grabbed += MarkDetectorGrabbed;
@@ -458,10 +483,16 @@ namespace SimJam.Tutorial
             m_detectorGrabTool.Grabbed += RecalibrateArms;
             m_detectorGrabTool.Released += RecalibrateArms;
 
-            var audio = parts.Root.AddComponent<GeigerAudio>();
+            var audio = detectorRoot.AddComponent<GeigerAudio>();
             audio.enabled = m_enableDetectorAudio;
-            m_detector = parts.Root.AddComponent<RadiationDetector>();
-            m_detector.Initialize(m_cameraRig, parts.ScreenText, parts.SensorTip, audio, m_detectorGrabTool, m_detectorHomePosition, Quaternion.Euler(m_detectorHomeEuler));
+            m_detector = detectorRoot.AddComponent<RadiationDetector>();
+            m_detector.Initialize(m_cameraRig, legacyScreen, sensorTip, audio, m_detectorGrabTool, m_detectorHomePosition, Quaternion.Euler(m_detectorHomeEuler));
+
+            // Drive the prefab's TMP number + slider from the live reading.
+            if (screenSource != null)
+            {
+                detectorRoot.AddComponent<DetectorScreenBinder>().Bind(m_detector, screenSource);
+            }
         }
 
         private void MarkDetectorGrabbed()

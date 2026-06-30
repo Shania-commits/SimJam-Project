@@ -107,6 +107,97 @@ namespace SimJam.BarrelSimulator
             return parts;
         }
 
+        public struct PrefabDetector
+        {
+            public GameObject Root;
+            public Transform SensorTip;
+            public float ColliderBottomOffset;
+            public GameObject ScreenSource;
+        }
+
+        // The SAME identiFINDER as the lab: instantiate the colleague's prefab, auto-scale it to a sane
+        // height, re-centre the mesh on a clean root, and add a grab collider + body + sensor tip. Mirrors
+        // RadiationLabRoomSpawner.BuildCustomDetectorModel so the tutorial and lab show the identical model.
+        public static PrefabDetector BuildFromPrefab(GameObject prefab, float targetHeight)
+        {
+            var root = new GameObject("identiFINDER");
+            var instance = Object.Instantiate(prefab);
+            instance.name = "identiFINDER Model";
+            instance.transform.SetParent(root.transform, false);
+
+            // A world-space readout needs no UI input; drop the prefab's EventSystem (avoids dupes).
+            foreach (var eventSystem in instance.GetComponentsInChildren<UnityEngine.EventSystems.EventSystem>(true))
+            {
+                Object.Destroy(eventSystem.gameObject);
+            }
+
+            Bounds bounds;
+            if (TryGetMeshBounds(instance, out bounds) && bounds.size.y > 1e-4f)
+            {
+                instance.transform.localScale *= Mathf.Clamp(targetHeight / bounds.size.y, 1e-4f, 1000f);
+                if (TryGetMeshBounds(instance, out bounds))
+                {
+                    instance.transform.position += root.transform.position - bounds.center;
+                    TryGetMeshBounds(instance, out bounds);
+                }
+            }
+            else
+            {
+                bounds = new Bounds(root.transform.position, new Vector3(0.08f, targetHeight, 0.06f));
+            }
+
+            var halfHeight = Mathf.Max(0.02f, bounds.size.y * 0.5f);
+
+            var box = root.AddComponent<BoxCollider>();
+            box.center = root.transform.InverseTransformPoint(bounds.center);
+            box.size = bounds.size;
+
+            var rigidbody = root.AddComponent<Rigidbody>();
+            rigidbody.mass = 0.4f;
+            rigidbody.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+            rigidbody.interpolation = RigidbodyInterpolation.Interpolate;
+            rigidbody.isKinematic = false;
+
+            var tip = new GameObject("Sensor Tip");
+            tip.transform.SetParent(root.transform, false);
+            tip.transform.localPosition = new Vector3(0f, halfHeight, 0f);
+
+            return new PrefabDetector
+            {
+                Root = root,
+                SensorTip = tip.transform,
+                ColliderBottomOffset = halfHeight + 0.01f,
+                ScreenSource = instance,
+            };
+        }
+
+        // Bounds of the 3D mesh ONLY -- skips the world-space screen Canvas + sprite overlay, whose
+        // authored offset would otherwise blow up the bounds and shrink/misplace the model.
+        private static bool TryGetMeshBounds(GameObject root, out Bounds bounds)
+        {
+            bounds = default;
+            var hasBounds = false;
+            foreach (var renderer in root.GetComponentsInChildren<Renderer>(true))
+            {
+                if (renderer == null || renderer is SpriteRenderer || renderer.GetComponentInParent<Canvas>() != null)
+                {
+                    continue;
+                }
+
+                if (!hasBounds)
+                {
+                    bounds = renderer.bounds;
+                    hasBounds = true;
+                }
+                else
+                {
+                    bounds.Encapsulate(renderer.bounds);
+                }
+            }
+
+            return hasBounds;
+        }
+
         private static Material MakeStandardMaterial(Color color, float metallic, float glossiness)
         {
             Material material = new Material(Shader.Find("Standard"));

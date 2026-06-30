@@ -15713,6 +15713,8 @@ MonoBehaviour:
   m_detectorGrabRadius: 0.18
   m_detectorCompletionCps: 3
   m_customArmsPrefab: {fileID: 919132149155446097, guid: 38a4119925ba1ea458807788b731ec55, type: 3}
+  m_detectorPrefab: {fileID: 4443030164341006770, guid: b669ee183dedb2647b0e304bbfe282cb, type: 3}
+  m_detectorTargetHeight: 0.25
 --- !u!1 &2145739001
 GameObject:
   m_ObjectHideFlags: 0
