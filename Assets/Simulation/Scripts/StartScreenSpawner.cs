@@ -243,7 +243,10 @@ namespace SimJam
         private void BuildPlayRoom()
         {
             var roomRoot = new GameObject("Start Play Room");
-            roomRoot.transform.SetParent(transform, false);
+            // Build at WORLD origin, NOT under the spawner (which is offset in the scene): the rig starts
+            // at the origin and StartRoomLocomotion clamps/teleports around the origin, so the room walls
+            // must be centered there too -- otherwise the player walks/teleports straight through them.
+            roomRoot.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
 
             var floorMat = CreateRoomMaterial("Start Floor Mat", new Color(0.34f, 0.36f, 0.40f));
             var wallMat = CreateRoomMaterial("Start Wall Mat", new Color(0.46f, 0.48f, 0.52f));

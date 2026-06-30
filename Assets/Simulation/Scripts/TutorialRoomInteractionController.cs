@@ -151,6 +151,13 @@ namespace SimJam.Tutorial
             EnsureCustomArms();
             UpdateMovement();
             UpdateTeleport();
+            // If the player chose locomotion (teleport disabled), the gated teleport step can never be
+            // completed by teleporting -- auto-unlock it so a Smooth player isn't soft-locked at step 4.
+            if (!m_enableTeleport && m_tutorialManager != null && m_tutorialManager.IsCurrentStep(m_teleportStepIndex))
+            {
+                m_tutorialManager.CompleteStepIfCurrent(m_teleportStepIndex);
+            }
+
             UpdateDetectorCompletion();
             UpdateTeachingSubmit();
             BillboardTeachingLabels();
