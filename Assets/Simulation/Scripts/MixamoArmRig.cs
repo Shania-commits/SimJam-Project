@@ -57,6 +57,14 @@ namespace SimJam.BarrelSimulator
 
         public bool IsReady => m_ready;
 
+        // Re-capture the wrist twist offset on the next solve. Call when a grab changes the arm pose
+        // so the hand stops twisting relative to the forearm (the offset is otherwise latched once).
+        public void RecalibrateHands()
+        {
+            m_handCalibrated[0] = false;
+            m_handCalibrated[1] = false;
+        }
+
         public void Initialize(OVRCameraRig rig, GameObject armsInstance)
         {
             m_rig = rig;

@@ -1066,6 +1066,14 @@ namespace SimJam.BarrelSimulator
             m_customArmRig.Initialize(m_cameraRig, m_customArmsInstance);
         }
 
+        private void OnDetectorGrabChanged()
+        {
+            if (m_customArmRig != null && m_customArmRig.IsReady)
+            {
+                m_customArmRig.RecalibrateHands();
+            }
+        }
+
         private void EnsureDetector()
         {
             if (m_detectorRoot != null)
@@ -1115,6 +1123,10 @@ namespace SimJam.BarrelSimulator
             m_detectorGrabTool.Initialize(m_cameraRig, m_detectorGrabRadius);
             m_detectorGrabTool.HeldLocalPosition = m_detectorHeldLocalPosition;
             m_detectorGrabTool.HeldLocalEuler = m_detectorHeldLocalEuler;
+            // Re-calibrate the arm rig's wrist twist when the detector is grabbed/released so the hand
+            // doesn't twist (the offset is otherwise latched once in the relaxed startup pose).
+            m_detectorGrabTool.Grabbed += OnDetectorGrabChanged;
+            m_detectorGrabTool.Released += OnDetectorGrabChanged;
 
             var geigerAudio = m_detectorRoot.AddComponent<GeigerAudio>();
             var detector = m_detectorRoot.AddComponent<RadiationDetector>();

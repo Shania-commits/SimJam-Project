@@ -453,6 +453,9 @@ namespace SimJam.Tutorial
             m_detectorGrabTool = parts.Root.AddComponent<GrabbableTool>();
             m_detectorGrabTool.Initialize(m_cameraRig, m_detectorGrabRadius);
             m_detectorGrabTool.Grabbed += MarkDetectorGrabbed;
+            // Re-calibrate the arm rig's wrist twist on grab/release so the hand doesn't twist.
+            m_detectorGrabTool.Grabbed += RecalibrateArms;
+            m_detectorGrabTool.Released += RecalibrateArms;
 
             var audio = parts.Root.AddComponent<GeigerAudio>();
             audio.enabled = m_enableDetectorAudio;
@@ -463,6 +466,14 @@ namespace SimJam.Tutorial
         private void MarkDetectorGrabbed()
         {
             m_detectorWasGrabbed = true;
+        }
+
+        private void RecalibrateArms()
+        {
+            if (m_customArmRig != null && m_customArmRig.IsReady)
+            {
+                m_customArmRig.RecalibrateHands();
+            }
         }
 
         private void CompleteDetectorStep()
@@ -517,6 +528,8 @@ namespace SimJam.Tutorial
             if (m_detectorGrabTool != null)
             {
                 m_detectorGrabTool.Grabbed -= MarkDetectorGrabbed;
+                m_detectorGrabTool.Grabbed -= RecalibrateArms;
+                m_detectorGrabTool.Released -= RecalibrateArms;
             }
         }
     }
