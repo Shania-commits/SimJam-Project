@@ -312,6 +312,10 @@ namespace SimJam.BarrelSimulator
         private int m_triesUsed;
         private float m_roundStartTime;
         private float m_nextTimerStatusTime;
+        // End-of-round stats: barrels the player swept with the held detector, and the elapsed time
+        // captured at resolution (RoundElapsedSeconds returns 0 once the phase flips to Resolved).
+        private readonly HashSet<BarrelInstance> m_scannedBarrels = new HashSet<BarrelInstance>();
+        private float m_roundElapsedAtResolve;
         private GameObject m_startButtonRoot;
         private Transform m_startButtonCap;
         private TextMesh m_startButtonLabel;
@@ -401,6 +405,7 @@ namespace SimJam.BarrelSimulator
             UpdateHapticPulse();
             UpdateStartButton();
             UpdateRoundTimer();
+            PollScannedBarrels();
 
             // A button (or hand pinch) submits a guess: whatever barrel the detector is aimed at
             // is the player's answer. The A button no longer reshuffles the barrels — only the
@@ -498,6 +503,7 @@ namespace SimJam.BarrelSimulator
         {
             GenerateRun();
             m_triesUsed = 0;
+            m_scannedBarrels.Clear();
             m_roundStartTime = Time.time;
             m_nextTimerStatusTime = Time.time;
             m_phase = SimulationPhase.Playing;
@@ -522,6 +528,9 @@ namespace SimJam.BarrelSimulator
                 return GuessOutcome.NoTarget;
             }
 
+            // Capture elapsed time before any phase flip (RoundElapsedSeconds returns 0 once Resolved).
+            m_roundElapsedAtResolve = RoundElapsedSeconds;
+
             var target = GetAimedBarrel();
             if (target == null)
             {
@@ -536,7 +545,6 @@ namespace SimJam.BarrelSimulator
             {
                 outcome = GuessOutcome.Correct;
                 m_phase = SimulationPhase.Resolved;
-                ShowMessage("You found the\nradioactive material", new Color(0.25f, 1f, 0.4f), 6f);
                 PulseHaptic(DetectorController(), 0.35f, 0.6f, 0.25f);
                 SetStatus("Correct! Press START for a new round.");
             }
@@ -547,7 +555,6 @@ namespace SimJam.BarrelSimulator
                 if (m_triesUsed >= MaxTries)
                 {
                     m_phase = SimulationPhase.Resolved;
-                    ShowMessage("That is incorrect\nOut of tries — press START", new Color(1f, 0.25f, 0.25f), 6f);
                     SetStatus("Out of tries. Press START for a new round.");
                 }
                 else
@@ -562,8 +569,64 @@ namespace SimJam.BarrelSimulator
             }
 
             RefreshStartButtonVisual();
+            if (m_phase == SimulationPhase.Resolved)
+            {
+                ShowStatsPanel(correct);
+            }
+
             OnGuessResolved?.Invoke(outcome, m_triesUsed, MaxTries);
             return outcome;
+        }
+
+        // Poll the barrel the held detector is aimed at and record it as "scanned" (accuracy stat).
+        private void PollScannedBarrels()
+        {
+            if (m_phase != SimulationPhase.Playing)
+            {
+                return;
+            }
+
+            if (m_detectorGrabTool == null || !m_detectorGrabTool.IsHeld)
+            {
+                return;
+            }
+
+            var aimed = GetAimedBarrel();
+            if (aimed != null)
+            {
+                m_scannedBarrels.Add(aimed);
+            }
+        }
+
+        private int CountScannedAlive()
+        {
+            var count = 0;
+            foreach (var barrel in m_scannedBarrels)
+            {
+                if (barrel != null)
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        // End-of-round stats panel: total time, scan accuracy, barrels remaining. Reuses the head-locked
+        // transparent message panel; a long hold keeps it up until the next round's StartSimulation
+        // message replaces it.
+        private void ShowStatsPanel(bool correct)
+        {
+            var total = m_spawnedBarrels.Count;
+            var scanned = CountScannedAlive();
+            var remaining = Mathf.Max(0, total - scanned);
+            var pct = total > 0 ? Mathf.RoundToInt(100f * scanned / total) : 0;
+            var header = correct ? "MATERIAL FOUND" : "ROUND OVER";
+            var color = correct ? new Color(0.25f, 1f, 0.4f) : new Color(1f, 0.45f, 0.2f);
+            ShowMessage(
+                $"{header}\nTIME  {FormatRoundTime(m_roundElapsedAtResolve)}\n" +
+                $"SCANNED  {scanned}/{total}  ({pct}%)\nREMAINING  {remaining}\n" +
+                "Press START for a new round", color, 9999f);
         }
 
         private void UpdateRoundTimer()
