@@ -452,6 +452,7 @@ namespace SimJam.Tutorial
 
             m_detectorGrabTool = parts.Root.AddComponent<GrabbableTool>();
             m_detectorGrabTool.Initialize(m_cameraRig, m_detectorGrabRadius);
+            m_detectorGrabTool.FlipHeldAboutAim = true; // screen faces the player when held
             m_detectorGrabTool.Grabbed += MarkDetectorGrabbed;
             // Re-calibrate the arm rig's wrist twist on grab/release so the hand doesn't twist.
             m_detectorGrabTool.Grabbed += RecalibrateArms;

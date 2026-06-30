@@ -17,6 +17,9 @@ namespace SimJam.BarrelSimulator
         // and (0,0.040,0.065) is the inverse-grip offset that seats the handle in the fist.
         public Vector3 HeldLocalPosition = new Vector3(0f, 0.040f, 0.065f);
         public Vector3 HeldLocalEuler = new Vector3(55f, 0f, 0f);
+        // Spin the held tool 180deg about its own aim axis (local Y) so its screen faces the player
+        // instead of away. The aim/measurement direction is unchanged.
+        public bool FlipHeldAboutAim;
 
         public bool IsHeld
         {
@@ -133,7 +136,9 @@ namespace SimJam.BarrelSimulator
             m_rigidbody.isKinematic = true;
             transform.SetParent(anchor, true);
             transform.localPosition = HeldLocalPosition;
-            transform.localRotation = Quaternion.Euler(HeldLocalEuler);
+            transform.localRotation = FlipHeldAboutAim
+                ? Quaternion.Euler(HeldLocalEuler) * Quaternion.Euler(0f, 180f, 0f)
+                : Quaternion.Euler(HeldLocalEuler);
             m_isHeld = true;
             m_heldController = controller;
             m_heldAnchor = anchor;
