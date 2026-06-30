@@ -1,3 +1,4 @@
+using SimJam.BarrelSimulator;
 using UnityEngine;
 
 namespace SimJam.Tutorial
@@ -43,6 +44,8 @@ namespace SimJam.Tutorial
         private static readonly Vector3 FloorBarrel55Scale = new Vector3(0.19567f, 0.1853504f, 0.19567f);
         private static readonly Vector3 FloorBarrel30Scale = new Vector3(0.14f, 0.14f, 0.14f);
         private static readonly Vector3 ShelfSmallBarrelScale = new Vector3(0.12f, 0.12f, 0.12f);
+        // Floor spot for the detector podium; must match TutorialRoomInteractionController.m_detectorHomePosition X/Z.
+        private static readonly Vector3 DetectorPodiumFloor = new Vector3(-2.25f, 0f, -1.5f);
 
         private void Awake()
         {
@@ -95,6 +98,7 @@ namespace SimJam.Tutorial
             BuildAisle(root.transform);
             BuildEnvironmentalWear(root.transform);
             BuildTrainingTables(root.transform);
+            BuildDetectorPodium(root.transform);
             BuildBackWallShelving(root.transform);
             BuildClutter(root.transform);
             BuildPostersAndWallMarks(root.transform);
@@ -196,19 +200,17 @@ namespace SimJam.Tutorial
         {
             var spawnTable = BuildUtilityTable(root, "Spawn-Side Hold-Up Table", new Vector3(-1.95f, 0f, -2.35f), Quaternion.Euler(0f, 8f, 0f), new Vector2(1.7f, 0.74f));
             BuildClipboard(root, "Spawn Table Clipboard", spawnTable.TransformPoint(new Vector3(0.54f, 0.86f, -0.22f)), spawnTable.rotation * Quaternion.Euler(0f, 18f, 0f));
-            BuildDetectorStation(root, "IdentiFINDER Detector Station", spawnTable.TransformPoint(new Vector3(-0.35f, 0.86f, 0.12f)), spawnTable.rotation * Quaternion.Euler(0f, -8f, 0f));
-            CreateCube(root, "Spawn Table Detector Tag", spawnTable.TransformPoint(new Vector3(-0.48f, 0.86f, 0.18f)), new Vector3(0.26f, 0.018f, 0.16f), m_labelMaterial, false, spawnTable.rotation);
+            // Detector now spawns on a floor podium (BuildDetectorPodium), not a table dock.
         }
 
-        private void BuildDetectorStation(Transform parent, string objectName, Vector3 position, Quaternion rotation)
+        private void BuildDetectorPodium(Transform root)
         {
-            var station = new GameObject(objectName);
-            station.transform.SetParent(parent, false);
-            station.transform.SetPositionAndRotation(position, rotation);
-
-            CreateCube(station.transform, "Detector Dock Base", Vector3.zero, new Vector3(0.40f, 0.035f, 0.24f), m_darkMetalMaterial, false);
-            CreateCube(station.transform, "Dock Left Rail", new Vector3(-0.16f, 0.045f, 0f), new Vector3(0.035f, 0.035f, 0.22f), m_metalMaterial, false);
-            CreateCube(station.transform, "Dock Right Rail", new Vector3(0.16f, 0.045f, 0f), new Vector3(0.035f, 0.035f, 0.22f), m_metalMaterial, false);
+            // Reuse the lab's concrete pedestal (top at PedestalTopHeight = 1.02 m, colliders enabled) so
+            // the identiFINDER always spawns on a proper podium. Adapt the dresser's CreateMaterial to
+            // RoomDecorator's 6-arg MaterialFactory (emission unused here).
+            RoomDecorator.MaterialFactory adapt = (color, name, metallic, smoothness, albedo, emission)
+                => CreateMaterial(name, color, metallic, smoothness, albedo);
+            RoomDecorator.BuildDetectorPedestal(root, DetectorPodiumFloor, adapt);
         }
 
         private void BuildClipboard(Transform parent, string objectName, Vector3 position, Quaternion rotation)
