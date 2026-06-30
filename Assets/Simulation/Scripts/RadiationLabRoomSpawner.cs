@@ -148,6 +148,7 @@ namespace SimJam.BarrelSimulator
         [SerializeField, Min(0.2f)] private float m_customArmsTargetReach = 0.64f;
         [SerializeField, Range(0f, 130f)] private float m_customArmsFingerCurlAngle = 70f;
         [SerializeField] private Vector3 m_customArmsFingerCurlAxis = new Vector3(0f, 0f, 1f);
+        [SerializeField] private float m_customArmsFingerCurlSign = 1f; // flip to -1 if fingers curl backward
 
         [Header("Barrel prefabs")]
         [SerializeField] private BarrelPrefabSet m_barrelPrefabs;
@@ -1130,6 +1131,7 @@ namespace SimJam.BarrelSimulator
             m_customArmRig.TargetArmReach = m_customArmsTargetReach;
             m_customArmRig.FingerCurlAngle = m_customArmsFingerCurlAngle;
             m_customArmRig.FingerCurlAxis = m_customArmsFingerCurlAxis;
+            m_customArmRig.FingerCurlSign = m_customArmsFingerCurlSign;
             m_customArmRig.Initialize(m_cameraRig, m_customArmsInstance);
         }
 

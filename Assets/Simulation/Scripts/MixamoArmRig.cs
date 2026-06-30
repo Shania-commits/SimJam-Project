@@ -133,29 +133,28 @@ namespace SimJam.BarrelSimulator
                     m_upperRestAxis[i] = m_upperArm[i].InverseTransformPoint(m_foreArm[i].position).normalized;
                     m_foreRestAxis[i] = m_foreArm[i].InverseTransformPoint(m_hand[i].position).normalized;
 
-                    // All finger joints (everything under the Hand bone) + their rest rotations, plus a
-                    // per-bone bend axis computed from the hand geometry so curl bends toward the palm.
-                    // A single fixed local axis splays because Mixamo's per-bone orientations vary.
+                    // All finger joints (everything under the Hand bone) + their rest rotations. Curl is a
+                    // hinge about the KNUCKLE LINE (index->pinky), the natural finger-flex axis, captured in
+                    // each bone's local frame so every joint flexes about the SAME world axis -> a clean
+                    // fist, not a mangled splay (a per-bone cross-product axis was inconsistent AND pointed
+                    // the wrong way). The thumb (different rest orientation) is left uncurled.
                     var fingers = new List<Transform>();
                     CollectDescendants(m_hand[i], fingers);
                     m_fingerBones[i] = fingers.ToArray();
                     m_fingerRest[i] = new Quaternion[fingers.Count];
                     m_fingerBendAxis[i] = new Vector3[fingers.Count];
 
-                    // Estimate the palm normal from the knuckle fan (auto-mirrors for left/right).
+                    // Knuckle line index->pinky; auto-mirrors L/R. +this axis curls toward the palm.
                     var fingerPrefix = i == 0 ? "mixamorig:Left" : "mixamorig:Right";
                     var indexKnuckle = FindDeep(m_hand[i], fingerPrefix + "HandIndex1");
-                    var middleKnuckle = FindDeep(m_hand[i], fingerPrefix + "HandMiddle1");
                     var pinkyKnuckle = FindDeep(m_hand[i], fingerPrefix + "HandPinky1");
-                    var palmNormal = Vector3.up;
-                    if (indexKnuckle != null && middleKnuckle != null && pinkyKnuckle != null)
+                    var hingeWorld = Vector3.zero;
+                    if (indexKnuckle != null && pinkyKnuckle != null)
                     {
-                        var alongFingers = (middleKnuckle.position - m_hand[i].position).normalized;
-                        var acrossKnuckles = (pinkyKnuckle.position - indexKnuckle.position).normalized;
-                        var n = Vector3.Cross(alongFingers, acrossKnuckles);
-                        if (n.sqrMagnitude > 1e-8f)
+                        var across = pinkyKnuckle.position - indexKnuckle.position;
+                        if (across.sqrMagnitude > 1e-8f)
                         {
-                            palmNormal = n.normalized;
+                            hingeWorld = across.normalized;
                         }
                     }
 
@@ -163,17 +162,14 @@ namespace SimJam.BarrelSimulator
                     {
                         var bone = fingers[f];
                         m_fingerRest[i][f] = bone.localRotation;
-                        if (bone.childCount > 0)
+                        // Curl only real finger joints: must have a child, a valid hinge, and not be a thumb.
+                        if (bone.childCount > 0 && hingeWorld.sqrMagnitude > 1e-8f && !bone.name.Contains("Thumb"))
                         {
-                            var dirToChild = bone.GetChild(0).position - bone.position;
-                            var bendAxisWorld = Vector3.Cross(dirToChild.normalized, palmNormal);
-                            m_fingerBendAxis[i][f] = bendAxisWorld.sqrMagnitude > 1e-8f
-                                ? bone.InverseTransformDirection(bendAxisWorld.normalized)
-                                : Vector3.zero;
+                            m_fingerBendAxis[i][f] = bone.InverseTransformDirection(hingeWorld);
                         }
                         else
                         {
-                            m_fingerBendAxis[i][f] = Vector3.zero; // fingertip: no child, don't curl
+                            m_fingerBendAxis[i][f] = Vector3.zero; // thumb / fingertip / no hinge: don't curl
                         }
                     }
                 }
@@ -320,8 +316,15 @@ namespace SimJam.BarrelSimulator
                     continue;
                 }
 
-                // Bend around each bone's palm-ward axis; fall back to the legacy fixed axis if unknown.
-                var axis = axes != null && f < axes.Length && axes[f].sqrMagnitude > 1e-8f ? axes[f] : FingerCurlAxis;
+                // Hinge each curlable joint about the knuckle line; zero-axis bones (thumb, fingertips)
+                // stay at their rest pose so they never splay/mangle.
+                var axis = axes != null && f < axes.Length ? axes[f] : Vector3.zero;
+                if (axis.sqrMagnitude < 1e-8f)
+                {
+                    bones[f].localRotation = rest[f];
+                    continue;
+                }
+
                 bones[f].localRotation = rest[f] * Quaternion.AngleAxis(amount, axis);
             }
         }
