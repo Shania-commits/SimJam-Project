@@ -62,6 +62,9 @@ namespace SimJam.BarrelSimulator
         private readonly Quaternion[][] m_fingerRest = new Quaternion[2][];
         private readonly Vector3[][] m_fingerBendAxis = new Vector3[2][];
         private bool m_ready;
+        // One-shot recalibration shortly after init so the wrist twist offset is captured from a settled,
+        // tracked pose instead of frame 1 (controllers can read a bad orientation before tracking warms up).
+        private float m_settleRecalibrateAt = -1f;
 
         public bool IsReady => m_ready;
 
@@ -181,6 +184,10 @@ namespace SimJam.BarrelSimulator
             }
 
             m_ready = ok;
+            if (ok)
+            {
+                m_settleRecalibrateAt = Time.time + 0.75f;
+            }
         }
 
         private void LateUpdate()
@@ -188,6 +195,14 @@ namespace SimJam.BarrelSimulator
             if (!m_ready || m_rig == null || m_rig.centerEyeAnchor == null)
             {
                 return;
+            }
+
+            // Re-capture the wrist twist once, after tracking has settled, so the hands don't lock a bad
+            // frame-1 orientation (e.g. a hand pointing sideways before the controller is tracked).
+            if (m_settleRecalibrateAt > 0f && Time.time >= m_settleRecalibrateAt)
+            {
+                m_settleRecalibrateAt = -1f;
+                RecalibrateHands();
             }
 
             var head = m_rig.centerEyeAnchor;

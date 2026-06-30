@@ -177,12 +177,13 @@ namespace SimJam
                 return;
             }
 
-            // Mount the menu flat on the room's front (+Z) wall at eye height, facing into the room.
+            // Mount the menu flat on the room's front (+Z) wall at eye height, readable from the room.
             // Fixed (no billboard/follow) so it can never end up in the floor. The room is built at world
-            // origin with the +Z wall centre at z = +4, so sit the panel just in front of it.
+            // origin with the +Z wall centre at z = +4, so sit the panel just in front of it. The canvas
+            // forward points INTO the wall (+Z) so its readable face points back at the player.
             m_canvas.transform.SetPositionAndRotation(
                 new Vector3(0f, m_wallPanelHeight, 3.9f),
-                Quaternion.LookRotation(Vector3.back, Vector3.up));
+                Quaternion.LookRotation(Vector3.forward, Vector3.up));
             m_panelAnchored = true;
         }
 

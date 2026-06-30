@@ -547,6 +547,14 @@ namespace SimJam.Tutorial
             m_detectorRootTf = detectorRoot.transform;
             m_detectorSensorTip = sensorTip;
 
+            // Rest on the podium without falling or rolling off: kinematic at spawn. GrabbableTool makes
+            // it dynamic again on release after the first grab.
+            var detectorBody = detectorRoot.GetComponent<Rigidbody>();
+            if (detectorBody != null)
+            {
+                detectorBody.isKinematic = true;
+            }
+
             m_detectorGrabTool = detectorRoot.AddComponent<GrabbableTool>();
             m_detectorGrabTool.Initialize(m_cameraRig, m_detectorGrabRadius);
             m_detectorGrabTool.HeldLocalPosition = m_detectorHeldLocalPosition;
@@ -593,11 +601,16 @@ namespace SimJam.Tutorial
                 : GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             barrel.name = objectName;
             barrel.transform.SetParent(transform, true);
-            // floorPosition.y = 0 assumes the barrel model's pivot is at its base (true for the lab
-            // 55-gal prefab); a centre-pivoted model would need a half-height offset.
             barrel.transform.SetPositionAndRotation(floorPosition, Quaternion.identity);
             FitTeachingBarrel(barrel);
             EnsureLabBarrelCollider(barrel);
+            // Rest the VISIBLE mesh bottom on the floor: the barrel FBX pivot is not at its base, so a
+            // plain y=0 placement sinks the drum into the ground.
+            if (TryGetBarrelBounds(barrel, out var bounds))
+            {
+                barrel.transform.position += new Vector3(0f, floorPosition.y - bounds.min.y, 0f);
+            }
+
             return barrel;
         }
 

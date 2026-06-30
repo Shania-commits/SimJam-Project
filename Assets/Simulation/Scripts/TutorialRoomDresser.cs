@@ -23,6 +23,8 @@ namespace SimJam.Tutorial
 
         private const string GeneratedRootName = "Tutorial Room Dressing (Generated)";
 
+        private bool m_builtAtRuntime;
+
         private Material m_tableMaterial;
         private Material m_metalMaterial;
         private Material m_darkMetalMaterial;
@@ -79,7 +81,18 @@ namespace SimJam.Tutorial
                 return;
             }
 
+            // At runtime, build exactly once (Awake) so the later OnEnable/Start rebuilds don't clear and
+            // re-create the podium after the detector has already been placed on it.
+            if (Application.isPlaying && m_builtAtRuntime)
+            {
+                return;
+            }
+
             BuildRoomDressing();
+            if (Application.isPlaying)
+            {
+                m_builtAtRuntime = true;
+            }
         }
 
         [ContextMenu("Rebuild Tutorial Dressing")]
