@@ -226,12 +226,12 @@ namespace SimJam.BarrelSimulator
         [SerializeField, Min(0.001f)] private float m_shelfSurfaceClearance = 0.015f;
 
         [Header("Locomotion")]
-        [SerializeField] private bool m_enableSmoothMove = false;
+        [SerializeField] private bool m_enableSmoothMove = true;
         [SerializeField] private bool m_enableTeleport = true;
         [SerializeField, Min(0.1f)] private float m_smoothMoveSpeed = 1.35f;
         [SerializeField, Min(5f)] private float m_snapTurnDegrees = 30f;
-        [SerializeField, Min(0.05f)] private float m_snapTurnCooldown = 0.3f;
-        [SerializeField, Min(0.05f)] private float m_thumbstickDeadzone = 0.22f;
+        [SerializeField, Min(0.05f)] private float m_snapTurnCooldown = 0.35f;
+        [SerializeField, Min(0.05f)] private float m_thumbstickDeadzone = 0.18f;
         // Teleport reliability: aim snaps to the nearest standable spot within a small search ring
         // instead of being rejected outright, so near-wall/near-edge aims always land. m_edgeMargin
         // is how close to a wall you can stand (was a 0.36 m dead-zone); keep it < m_playerRadius.
@@ -3257,10 +3257,9 @@ namespace SimJam.BarrelSimulator
 
             var clamped = ClampToRoom(worldPosition);
             clamped.y = m_locomotionRoot == m_cameraTransform && m_cameraRig == null ? m_defaultEyeHeight : 0f;
-            if (IsWalkablePosition(clamped))
-            {
-                m_locomotionRoot.position = clamped;
-            }
+            // Free glide like the tutorial: keep the room clamp but drop the per-barrel walkable gate
+            // that made the player snag/stick against every keep-out.
+            m_locomotionRoot.position = clamped;
         }
 
         private void CommitTeleport(Vector3 worldPosition)
