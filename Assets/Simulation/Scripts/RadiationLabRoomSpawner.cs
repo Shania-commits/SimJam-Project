@@ -287,6 +287,9 @@ namespace SimJam.BarrelSimulator
         private OVRInput.Controller m_lastDoorGrabController = OVRInput.Controller.None;
         private Transform m_doorGrabAnchor;
         private float m_doorGrabAngleOffset;
+        private bool m_doorAutoActive;   // poke-driven auto open/close (overridden by a manual swing)
+        private float m_doorAutoTarget;  // 0 = closed, m_doorOpenAngle = open
+        private bool m_doorAutoArmed = true;
         private bool m_leftPulseActive;
         private float m_leftPulseEndTime;
         private bool m_rightPulseActive;
@@ -3438,6 +3441,11 @@ namespace SimJam.BarrelSimulator
             {
                 TryStartDoorGrab(m_cameraRig != null ? m_cameraRig.rightControllerAnchor : null, OVRInput.RawButton.RHandTrigger, OVRInput.Controller.RTouch);
                 TryStartDoorGrab(m_cameraRig != null ? m_cameraRig.leftControllerAnchor : null, OVRInput.RawButton.LHandTrigger, OVRInput.Controller.LTouch);
+                if (m_doorGrabController == OVRInput.Controller.None)
+                {
+                    UpdateDoorPokeSelection();
+                }
+
                 return;
             }
 
@@ -3475,6 +3483,32 @@ namespace SimJam.BarrelSimulator
             m_doorGrabAnchor = null;
         }
 
+        // Poke (proximity, no grip) the door knob to auto-open/-close it — no aim, no manual swing.
+        // Armed-once: each fresh approach toggles the door, then re-arms when the hand leaves.
+        private void UpdateDoorPokeSelection()
+        {
+            var nearKnob = m_cameraRig != null
+                && (IsControllerNearDoorKnob(m_cameraRig.rightControllerAnchor)
+                    || IsControllerNearDoorKnob(m_cameraRig.leftControllerAnchor));
+
+            if (!nearKnob)
+            {
+                m_doorAutoArmed = true;
+                return;
+            }
+
+            if (!m_doorAutoArmed)
+            {
+                return;
+            }
+
+            m_doorAutoArmed = false;
+            m_doorAutoActive = true;
+            // Toggle: if the auto target is open, close it; otherwise open it.
+            m_doorAutoTarget = Mathf.Abs(m_doorAutoTarget) > 1f ? 0f : m_doorOpenAngle;
+            PulseHaptic(OVRInput.Controller.RTouch, 0.5f, 0.4f, 0.06f);
+        }
+
         private float ComputeHandHingeAngle(Vector3 worldPosition)
         {
             var parentSpace = m_doorPivot.parent != null
@@ -3502,10 +3536,18 @@ namespace SimJam.BarrelSimulator
 
             if (m_doorGrabController != OVRInput.Controller.None && m_doorGrabAnchor != null)
             {
+                // Manual swing (fallback) overrides the auto-driver.
+                m_doorAutoActive = false;
                 var targetAngle = ComputeHandHingeAngle(m_doorGrabAnchor.position) + m_doorGrabAngleOffset;
                 targetAngle = Mathf.Clamp(targetAngle, minAngle, maxAngle);
                 var follow = 1f - Mathf.Exp(-m_doorFollowSharpness * Time.deltaTime);
                 m_doorCurrentAngle = Mathf.LerpAngle(m_doorCurrentAngle, targetAngle, follow);
+            }
+            else if (m_doorAutoActive)
+            {
+                // Auto-open/close (knob poked): smooth-follow toward the auto target angle.
+                var follow = 1f - Mathf.Exp(-m_doorFollowSharpness * Time.deltaTime);
+                m_doorCurrentAngle = Mathf.LerpAngle(m_doorCurrentAngle, m_doorAutoTarget, follow);
             }
             else if (m_doorCurrentAngle != 0f && Mathf.Abs(m_doorCurrentAngle) <= m_doorLatchAngle)
             {
