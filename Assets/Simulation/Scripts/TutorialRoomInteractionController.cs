@@ -76,6 +76,7 @@ namespace SimJam.Tutorial
         private float m_nextSnapTurnTime;
         private GrabbableTool m_detectorGrabTool;
         private RadiationDetector m_detector;
+        private VrUiPointer m_uiPointer;
         private bool m_detectorWasGrabbed;
         private GameObject m_customArmsInstance;
         private MixamoArmRig m_customArmRig;
@@ -313,6 +314,18 @@ namespace SimJam.Tutorial
         private void UpdateTeleport()
         {
             if (!m_enableTeleport || m_locomotionRoot == null)
+            {
+                return;
+            }
+
+            // Don't teleport when the index trigger is being used to click a UI button (the trigger is
+            // both the teleport button and the slide-advance click button).
+            if (m_uiPointer == null)
+            {
+                m_uiPointer = FindAnyObjectByType<VrUiPointer>();
+            }
+
+            if (m_uiPointer != null && m_uiPointer.IsHoveringClickable)
             {
                 return;
             }

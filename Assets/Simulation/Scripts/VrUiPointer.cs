@@ -18,10 +18,14 @@ namespace SimJam
     public class VrUiPointer : MonoBehaviour
     {
         [SerializeField, Min(0.5f)] private float m_maxLength = 6f;
-        [SerializeField] private OVRInput.RawButton m_clickButton = OVRInput.RawButton.A;
+        [SerializeField] private OVRInput.RawButton m_clickButton = OVRInput.RawButton.RIndexTrigger;
         [SerializeField, Range(0f, 0.6f)] private float m_hitPadding = 0.25f; // forgiving hit area
         [SerializeField] private Color m_idleColor = new Color(0.35f, 0.8f, 1f, 0.9f);
         [SerializeField] private Color m_hitColor = new Color(0.3f, 1f, 0.45f, 0.95f);
+
+        // True while the laser rests on a clickable button this frame; locomotion reads this to avoid
+        // teleporting when the index trigger (also the click button) is used to click a UI button.
+        public bool IsHoveringClickable { get; private set; }
 
         private OVRCameraRig m_rig;
         private Transform m_ray;
@@ -41,6 +45,7 @@ namespace SimJam
             ResolveRay();
             if (m_ray == null || m_line == null)
             {
+                IsHoveringClickable = false;
                 SetVisible(false);
                 return;
             }
@@ -79,6 +84,7 @@ namespace SimJam
             }
 
             var clickable = hovered != null && hovered.interactable;
+            IsHoveringClickable = clickable;
             var color = clickable ? m_hitColor : m_idleColor;
 
             SetVisible(true);
