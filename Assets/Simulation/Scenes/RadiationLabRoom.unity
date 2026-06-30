@@ -167,8 +167,8 @@ MonoBehaviour:
   m_playerStartPosition: {x: 0, y: 0, z: -5.536}
   m_defaultEyeHeight: 1.6
   m_buildRoomGeometry: 1
-  m_roomSizeFeet: {x: 20, y: 20}
-  m_spawnRoomSizeFeet: {x: 12, y: 12}
+  m_roomSizeFeet: {x: 50, y: 50}
+  m_spawnRoomSizeFeet: {x: 20, y: 20}
   m_wallHeight: 2.75
   m_wallThickness: 0.1
   m_floorThickness: 0.08
@@ -215,13 +215,13 @@ MonoBehaviour:
   m_startButtonPressRadius: 0.12
   m_guessRayLength: 12
   m_guessConeAngle: 16
-  m_minBarrels: 24
-  m_maxBarrels: 70
-  m_minTables: 0
-  m_maxTables: 4
-  m_minShelfUnits: 4
-  m_maxShelfUnits: 14
-  m_layoutRetryCount: 24
+  m_minBarrels: 40
+  m_maxBarrels: 120
+  m_minTables: 2
+  m_maxTables: 8
+  m_minShelfUnits: 8
+  m_maxShelfUnits: 22
+  m_layoutRetryCount: 30
   m_useFixedSeed: 0
   m_fixedSeed: 12345
   m_playerClearance: 0.8
