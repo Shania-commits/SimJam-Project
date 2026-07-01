@@ -20,6 +20,7 @@ namespace SimJam.Tutorial
             public string title;
             [TextArea(3, 8)] public string caption;
             public Sprite backgroundImage;
+            public AudioClip narrationClip;
             public string nextButtonLabel = "Continue";
             public bool canGoBack = true;
             public bool canPause = true;
@@ -49,6 +50,10 @@ namespace SimJam.Tutorial
         [Header("UI art")]
         [SerializeField] private Sprite m_defaultCaptionBackgroundSprite;
         [SerializeField] private Sprite m_buttonSprite;
+
+        [Header("Narration")]
+        [SerializeField] private AudioSource m_narrationAudioSource;
+        [SerializeField] private bool m_playNarrationOnStepStart = true;
 
         [Header("VR panel placement")]
         [SerializeField] private bool m_createDefaultUiIfMissing = true;
@@ -178,6 +183,8 @@ namespace SimJam.Tutorial
                 m_steps[m_currentStepIndex].onStepCompleted?.Invoke();
             }
 
+            StopNarration();
+
             if (!m_loadMissionSceneOnFinish || string.IsNullOrWhiteSpace(m_missionSceneName))
             {
                 return;
@@ -260,6 +267,11 @@ namespace SimJam.Tutorial
                 Time.timeScale = 0f;
             }
 
+            if (m_narrationAudioSource != null && m_narrationAudioSource.isPlaying)
+            {
+                m_narrationAudioSource.Pause();
+            }
+
             RefreshControls();
         }
 
@@ -274,6 +286,11 @@ namespace SimJam.Tutorial
             if (m_pauseWithTimeScale)
             {
                 Time.timeScale = m_timeScaleBeforePause;
+            }
+
+            if (m_narrationAudioSource != null)
+            {
+                m_narrationAudioSource.UnPause();
             }
 
             RefreshControls();
@@ -307,6 +324,7 @@ namespace SimJam.Tutorial
                 SetText(m_titleText, string.Empty);
                 SetText(m_captionText, string.Empty);
                 SetText(m_stepCounterText, string.Empty);
+                StopNarration();
                 RefreshControls();
                 return;
             }
@@ -328,7 +346,58 @@ namespace SimJam.Tutorial
             }
 
             step.onStepStarted?.Invoke();
+            PlayNarration(step);
             RefreshControls();
+        }
+
+        private void PlayNarration(TutorialStep step)
+        {
+            if (!m_playNarrationOnStepStart)
+            {
+                return;
+            }
+
+            EnsureNarrationAudioSource();
+            if (m_narrationAudioSource == null)
+            {
+                return;
+            }
+
+            m_narrationAudioSource.Stop();
+            m_narrationAudioSource.clip = step.narrationClip;
+            if (step.narrationClip != null)
+            {
+                m_narrationAudioSource.Play();
+            }
+        }
+
+        private void StopNarration()
+        {
+            if (m_narrationAudioSource == null)
+            {
+                return;
+            }
+
+            m_narrationAudioSource.Stop();
+            m_narrationAudioSource.clip = null;
+        }
+
+        private void EnsureNarrationAudioSource()
+        {
+            if (m_narrationAudioSource != null)
+            {
+                return;
+            }
+
+            m_narrationAudioSource = GetComponent<AudioSource>();
+            if (m_narrationAudioSource == null)
+            {
+                m_narrationAudioSource = gameObject.AddComponent<AudioSource>();
+            }
+
+            m_narrationAudioSource.playOnAwake = false;
+            m_narrationAudioSource.loop = false;
+            m_narrationAudioSource.spatialBlend = 0f; // 2D so voiceover is heard from anywhere in the room
         }
 
         private void RefreshControls()
