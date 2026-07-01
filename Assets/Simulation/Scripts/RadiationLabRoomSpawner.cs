@@ -193,7 +193,7 @@ namespace SimJam.BarrelSimulator
         [SerializeField] private bool m_enableRoundTimer = true;
         [SerializeField, Min(10f)] private float m_roundDurationSeconds = 180f;
         [SerializeField, Min(0f)] private float m_transitionFadeSeconds = 0.6f;
-        [SerializeField, Min(0.04f)] private float m_startButtonPressRadius = 0.1f;
+        [SerializeField, Min(0.04f)] private float m_startButtonPressRadius = 0.15f; // larger = easier to poke
         [SerializeField, Min(0.5f)] private float m_guessRayLength = 12f;
         // Half-angle of the forgiving "aim cone" for submitting a guess: the player only needs to
         // point roughly at a drum, not pixel-perfectly. The closest-to-centre barrel within this
@@ -1450,7 +1450,7 @@ namespace SimJam.BarrelSimulator
             // Distance from the nearest hand to the cap. Mash it in with your hand — no aim/click.
             var dist = NearestHandDistanceToStart(out var nearController);
             const float maxTravel = 0.024f;
-            const float fireTravel = 0.018f;
+            const float fireTravel = 0.012f; // less push needed to fire (more sensitive)
             var penetration = Mathf.Max(0f, Mathf.Max(0.04f, m_startButtonPressRadius) - dist);
             var travel = Mathf.Clamp(penetration, 0f, maxTravel);
 
