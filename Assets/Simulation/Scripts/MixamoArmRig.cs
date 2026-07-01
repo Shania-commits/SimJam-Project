@@ -41,7 +41,7 @@ namespace SimJam.BarrelSimulator
         // Legacy fallback axis -- unused by the current knuckle-line curl (kept for Inspector compat).
         public Vector3 FingerCurlAxis = new Vector3(0f, 0f, 1f);
         // Flip to -1 if the fingers curl backward (away from the palm) on a given FBX.
-        public float FingerCurlSign = 1f;
+        public float FingerCurlSign = -1f;
 
         private OVRCameraRig m_rig;
         private Transform m_modelRoot;

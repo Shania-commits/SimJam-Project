@@ -80,7 +80,7 @@ namespace SimJam.Tutorial
         // Gentle finger curl on grab. MixamoArmRig now bends each bone around its own palm-ward axis
         // so it no longer disorients; flip the sign if fingers curl backward (away from the palm).
         [SerializeField, Range(0f, 130f)] private float m_armsFingerCurlAngle = 30f;
-        [SerializeField] private float m_armsFingerCurlSign = 1f;
+        [SerializeField] private float m_armsFingerCurlSign = -1f; // curl direction (flipped)
 
         private GameObject m_teleportMarker;
         private Renderer m_teleportMarkerRenderer;
@@ -748,7 +748,7 @@ namespace SimJam.Tutorial
             }
 #endif
 
-            if (!InputManager.IsButtonADownOrPinchStarted())
+            if (!IsSubmitPressed())
             {
                 return;
             }
@@ -772,6 +772,15 @@ namespace SimJam.Tutorial
             {
                 PlaySubmitFeedback(false);
             }
+        }
+
+        // Submit = A / index pinch; also X when the detector is held in the LEFT hand.
+        private bool IsSubmitPressed()
+        {
+            return InputManager.IsButtonADownOrPinchStarted()
+                || (m_detectorGrabTool != null
+                    && m_detectorGrabTool.HeldController == OVRInput.Controller.LTouch
+                    && OVRInput.GetDown(OVRInput.RawButton.X));
         }
 
         private AudioSource m_submitAudioSource;

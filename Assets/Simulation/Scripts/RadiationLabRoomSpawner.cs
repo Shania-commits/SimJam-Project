@@ -148,7 +148,7 @@ namespace SimJam.BarrelSimulator
         [SerializeField, Min(0.2f)] private float m_customArmsTargetReach = 0.64f;
         [SerializeField, Range(0f, 130f)] private float m_customArmsFingerCurlAngle = 70f;
         [SerializeField] private Vector3 m_customArmsFingerCurlAxis = new Vector3(0f, 0f, 1f);
-        [SerializeField] private float m_customArmsFingerCurlSign = 1f; // flip to -1 if fingers curl backward
+        [SerializeField] private float m_customArmsFingerCurlSign = -1f; // curl direction (flipped)
 
         [Header("Barrel prefabs")]
         [SerializeField] private BarrelPrefabSet m_barrelPrefabs;
@@ -438,7 +438,7 @@ namespace SimJam.BarrelSimulator
             // A button (or hand pinch) submits a guess: whatever barrel the detector is aimed at
             // is the player's answer. The A button no longer reshuffles the barrels — only the
             // wall START button does. Submission is a no-op outside an active round.
-            if (InputManager.IsButtonADownOrPinchStarted())
+            if (IsSubmitPressed())
             {
                 SubmitGuess();
             }
@@ -452,7 +452,7 @@ namespace SimJam.BarrelSimulator
                 StartSimulation();
             }
 
-            if (InputManager.IsButtonXDown())
+            if (InputManager.IsButtonXDown() && !IsDetectorHeldLeft())
             {
                 RandomizeRadiationCounts();
                 AssignHotSource();
@@ -487,6 +487,19 @@ namespace SimJam.BarrelSimulator
                 }
             }
 #endif
+        }
+
+        private bool IsDetectorHeldLeft()
+        {
+            return m_detectorGrabTool != null && m_detectorGrabTool.HeldController == OVRInput.Controller.LTouch;
+        }
+
+        // Submit = A / index pinch; also X when the detector is held in the LEFT hand, so a left-handed
+        // grip can submit with the same hand.
+        private bool IsSubmitPressed()
+        {
+            return InputManager.IsButtonADownOrPinchStarted()
+                || (IsDetectorHeldLeft() && OVRInput.GetDown(OVRInput.RawButton.X));
         }
 
         // ---------------------------------------------------------------------------------------
