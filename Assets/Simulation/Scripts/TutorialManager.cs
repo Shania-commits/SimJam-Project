@@ -77,6 +77,9 @@ namespace SimJam.Tutorial
         [SerializeField, Min(0f)] private float m_transitionFadeSeconds = 0.6f;
 
         private int m_currentStepIndex;
+        // Steps hidden for the chosen movement mode (the unused locomotion/teleport slide). They stay
+        // in the list so every other step index is unaffected; navigation + the counter skip over them.
+        private readonly HashSet<int> m_skippedSteps = new();
         private bool m_currentStepComplete;
         private bool m_isPaused;
         private float m_timeScaleBeforePause = 1f;
@@ -169,6 +172,12 @@ namespace SimJam.Tutorial
             }
 
             m_currentStepIndex++;
+            // Skip the movement slide hidden for the chosen locomotion mode (never the final step).
+            while (m_currentStepIndex < m_steps.Count - 1 && m_skippedSteps.Contains(m_currentStepIndex))
+            {
+                m_currentStepIndex++;
+            }
+
             ShowCurrentStep();
         }
 
@@ -230,6 +239,11 @@ namespace SimJam.Tutorial
             }
 
             m_currentStepIndex--;
+            while (m_currentStepIndex > 0 && m_skippedSteps.Contains(m_currentStepIndex))
+            {
+                m_currentStepIndex--;
+            }
+
             ShowCurrentStep();
         }
 
@@ -315,6 +329,56 @@ namespace SimJam.Tutorial
             ShowCurrentStep();
         }
 
+        // Hide a step for the chosen movement mode (the unused locomotion/teleport slide). The step
+        // stays in the list so every other step index is unaffected; navigation + the counter skip it.
+        public void SetStepSkipped(int stepIndex, bool skipped)
+        {
+            if (stepIndex < 0)
+            {
+                return;
+            }
+
+            if (skipped)
+            {
+                m_skippedSteps.Add(stepIndex);
+            }
+            else
+            {
+                m_skippedSteps.Remove(stepIndex);
+            }
+
+            RefreshStepCounter();
+        }
+
+        private int VisibleStepCount()
+        {
+            return Mathf.Max(0, m_steps.Count - m_skippedSteps.Count);
+        }
+
+        private int VisiblePosition(int index)
+        {
+            var position = 0;
+            for (var i = 0; i <= index && i < m_steps.Count; i++)
+            {
+                if (!m_skippedSteps.Contains(i))
+                {
+                    position++;
+                }
+            }
+
+            return position;
+        }
+
+        private void RefreshStepCounter()
+        {
+            if (m_steps.Count == 0)
+            {
+                return;
+            }
+
+            SetText(m_stepCounterText, $"{VisiblePosition(m_currentStepIndex)}/{VisibleStepCount()}");
+        }
+
         private void ShowCurrentStep()
         {
             m_currentStepComplete = false;
@@ -332,7 +396,7 @@ namespace SimJam.Tutorial
             var step = m_steps[m_currentStepIndex];
             SetText(m_titleText, step.title);
             SetText(m_captionText, step.caption);
-            SetText(m_stepCounterText, $"{m_currentStepIndex + 1}/{m_steps.Count}");
+            RefreshStepCounter();
             SetText(m_nextButtonLabelText, string.IsNullOrWhiteSpace(step.nextButtonLabel) ? "Continue" : step.nextButtonLabel);
 
             if (m_backgroundImage != null)

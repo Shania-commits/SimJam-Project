@@ -15715,6 +15715,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_tutorialManager: {fileID: 2140913002}
   m_teleportStepIndex: 4
+  m_movementStepIndex: 3
   m_detectorStepIndex: 5
   m_cameraRig: {fileID: 0}
   m_locomotionRoot: {fileID: 0}

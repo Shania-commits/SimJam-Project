@@ -14,6 +14,7 @@ namespace SimJam.Tutorial
         [Header("Tutorial")]
         [SerializeField] private TutorialManager m_tutorialManager;
         [SerializeField, Min(0)] private int m_teleportStepIndex = 4;
+        [SerializeField, Min(0)] private int m_movementStepIndex = 3;
         [SerializeField, Min(0)] private int m_detectorStepIndex = 5;
 
         [Header("Player")]
@@ -110,6 +111,14 @@ namespace SimJam.Tutorial
             if (m_tutorialManager == null)
             {
                 m_tutorialManager = GetComponent<TutorialManager>();
+            }
+
+            // Show only the movement slide matching the chosen locomotion; hide the other, so the
+            // tutorial has a single movement step (locomotion OR teleport, never both).
+            if (m_tutorialManager != null)
+            {
+                m_tutorialManager.SetStepSkipped(m_teleportStepIndex, !m_enableTeleport);
+                m_tutorialManager.SetStepSkipped(m_movementStepIndex, !m_enableSmoothMove);
             }
 
             ResolvePlayerReferences();
