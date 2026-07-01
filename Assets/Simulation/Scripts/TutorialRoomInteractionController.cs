@@ -63,7 +63,7 @@ namespace SimJam.Tutorial
         [SerializeField] private Vector3 m_inertBarrelPosition = new Vector3(-2.8f, 0f, 0.3f);  // "DON'T SUBMIT"
         [SerializeField, Min(100f)] private float m_hotBarrelActivityCps = 6000f;
         [SerializeField, Min(0)] private int m_teachingSubmitStepIndex = 6;
-        [SerializeField, Range(4f, 35f)] private float m_teachingGuessConeAngle = 24f; // forgiving "general area" aim
+        [SerializeField, Range(4f, 35f)] private float m_teachingGuessConeAngle = 34f; // very forgiving "general area" aim
         [Header("Feedback audio")]
         [SerializeField] private AudioClip m_correctSubmitClip;
         [SerializeField] private AudioClip m_incorrectSubmitClip;
@@ -827,8 +827,12 @@ namespace SimJam.Tutorial
                     continue;
                 }
 
-                var barrelCollider = barrel.GetComponentInChildren<Collider>();
-                var center = barrelCollider != null ? barrelCollider.bounds.center : barrel.transform.position;
+                // Aim at the VISIBLE barrel's vertical center (renderer bounds), not the collider's:
+                // the prefab collider can sit low, which drops the scan target under the floor. The
+                // renderer bounds center sits at the barrel's mid-height, so the cone covers the drum.
+                var center = TryGetBarrelBounds(barrel, out var barrelBounds)
+                    ? barrelBounds.center
+                    : barrel.transform.position;
                 var toBarrel = center - origin;
                 var distance = toBarrel.magnitude;
                 if (distance < 1e-3f || distance > maxDistance)
