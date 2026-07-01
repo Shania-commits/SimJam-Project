@@ -2160,7 +2160,7 @@ namespace SimJam.BarrelSimulator
                     HalfExtents = new Vector2(length * 0.5f, depth * 0.5f),
                     YawDegrees = rotation.eulerAngles.y
                 },
-                SurfaceY = surfaceHeights.Count > 0 ? surfaceHeights[0] : 1.05f,
+                SurfaceY = surfaceHeights.Count > 0 ? surfaceHeights[0] : 0.85f,
                 Forward = inward,
                 Size = shelfSlotSize,
                 TierCount = surfaceHeights.Count,
@@ -2476,7 +2476,7 @@ namespace SimJam.BarrelSimulator
                 {
                     var surfaceY = surfaceHeights != null
                         ? surfaceHeights[tier]
-                        : 1.05f + tier * 0.58f + m_shelfSurfaceClearance;
+                        : 0.85f + tier * 0.52f + m_shelfSurfaceClearance;
                     // Inset the run of slots by a 5 gal barrel's radius (~0.12) + margin so the end
                     // barrels stay fully on the board instead of hanging off the ends.
                     var halfUsable = Mathf.Max(0f, usableSize.x * 0.5f - 0.17f);
