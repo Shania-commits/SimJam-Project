@@ -149,21 +149,23 @@ namespace SimJam
             backgroundImage.color = m_backgroundSprite != null ? Color.white : new Color(0.03f, 0.035f, 0.035f, 0.96f);
             backgroundImage.raycastTarget = false;
 
-            var title = CreateText(panel, "Title", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -64f), new Vector2(880f, 96f), 46f);
+            // Clean, non-overlapping vertical stack: title band (top), instructions under it, the two mode
+            // buttons across the middle with a clear centre gap, Continue at the bottom. Text auto-fits its box.
+            var title = CreateText(panel, "Title", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -58f), new Vector2(880f, 90f), 44f);
             title.text = m_titleText;
 
-            var instructions = CreateText(panel, "Instructions", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -188f), new Vector2(880f, 150f), 28f);
+            var instructions = CreateText(panel, "Instructions", new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -180f), new Vector2(860f, 112f), 26f);
             instructions.text = "Walk around this room and try both movement styles.\n" +
                                  "Left stick to walk  -  right INDEX (front) trigger to teleport.\n" +
                                  "Pick whichever feels best, then Continue.";
 
-            m_locomotionButton = CreateButton(panel, "Locomotion Button", "Locomotion\n(walk)", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-180f, -10f), new Vector2(330f, 120f), 30f);
+            m_locomotionButton = CreateButton(panel, "Locomotion Button", "Locomotion\n(walk)", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(-175f, -38f), new Vector2(300f, 104f), 28f);
             m_locomotionButton.onClick.AddListener(() => SelectMode(MovementMode.Smooth));
 
-            m_teleportButton = CreateButton(panel, "Teleport Button", "Teleportation\n(trigger)", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(180f, -10f), new Vector2(330f, 120f), 30f);
+            m_teleportButton = CreateButton(panel, "Teleport Button", "Teleportation\n(trigger)", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(175f, -38f), new Vector2(300f, 104f), 28f);
             m_teleportButton.onClick.AddListener(() => SelectMode(MovementMode.Teleport));
 
-            m_continueButton = CreateButton(panel, "Continue Button", "Continue", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 64f), new Vector2(330f, 92f), 38f);
+            m_continueButton = CreateButton(panel, "Continue Button", "Continue", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 52f), new Vector2(300f, 80f), 36f);
             m_continueButton.onClick.AddListener(StartGame);
             m_continueButton.interactable = false;
 
@@ -279,7 +281,11 @@ namespace SimJam
         {
             var rect = CreateRect(parent, objectName, anchorMin, anchorMax, anchoredPosition, size);
             var text = rect.gameObject.AddComponent<TextMeshProUGUI>();
-            text.fontSize = fontSize;
+            // Auto-fit: shrink the text to stay inside its box so long strings never overflow onto the
+            // rows below (fontSize is the cap; it drops as far as ~half before clipping).
+            text.enableAutoSizing = true;
+            text.fontSizeMax = fontSize;
+            text.fontSizeMin = Mathf.Max(12f, fontSize * 0.5f);
             text.color = Color.white;
             text.alignment = TextAlignmentOptions.Center;
             text.textWrappingMode = TextWrappingModes.Normal;
