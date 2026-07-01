@@ -15534,6 +15534,7 @@ MonoBehaviour:
       m_PersistentCalls:
         m_Calls: []
   - title: 'Tutorial: Movement'
+    narrationClip: {fileID: 8300000, guid: b7e2c4a90d1f43586a2c9e4f7b1d8c60, type: 3}
     caption: 'Push the LEFT thumbstick to walk through the environment, and push
       the RIGHT thumbstick left or right to snap-turn.
 
@@ -15587,6 +15588,7 @@ MonoBehaviour:
       m_PersistentCalls:
         m_Calls: []
   - title: 'Tutorial: Submit a Reading'
+    narrationClip: {fileID: 8300000, guid: c8f3d5b1a2e64709b3d1f8a6c4e2b7d0, type: 3}
     caption: 'Scan BOTH barrels with the detector. One reads far higher than the other.
 
 
