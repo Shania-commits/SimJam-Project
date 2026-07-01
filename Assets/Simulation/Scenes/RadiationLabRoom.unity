@@ -215,6 +215,8 @@ MonoBehaviour:
   m_startButtonPressRadius: 0.09
   m_guessRayLength: 12
   m_guessConeAngle: 24
+  m_correctSubmitClip: {fileID: 8300000, guid: b0dea170bf715f045a3b888c582518b8, type: 3}
+  m_incorrectSubmitClip: {fileID: 8300000, guid: 95acfdbee1535fa45935d3ccf1a1bc03, type: 3}
   m_minBarrels: 60
   m_maxBarrels: 120
   m_minTables: 2

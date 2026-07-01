@@ -200,6 +200,10 @@ namespace SimJam.BarrelSimulator
         // cone is the pick.
         [SerializeField, Range(4f, 35f)] private float m_guessConeAngle = 24f; // forgiving "general area" aim
 
+        [Header("Feedback audio")]
+        [SerializeField] private AudioClip m_correctSubmitClip;
+        [SerializeField] private AudioClip m_incorrectSubmitClip;
+
         [Header("Scenario randomization")]
         [SerializeField, Min(1)] private int m_minBarrels = 11;
         [SerializeField, Min(1)] private int m_maxBarrels = 45;
@@ -592,6 +596,7 @@ namespace SimJam.BarrelSimulator
                 PulseHaptic(DetectorController(), 0.5f, 0.5f, 0.12f);
             }
 
+            PlaySubmitFeedback(correct);
             RefreshStartButtonVisual();
             if (m_phase == SimulationPhase.Resolved)
             {
@@ -600,6 +605,27 @@ namespace SimJam.BarrelSimulator
 
             OnGuessResolved?.Invoke(outcome, m_triesUsed, MaxTries);
             return outcome;
+        }
+
+        private AudioSource m_submitAudioSource;
+
+        // Win chime on a correct guess, loss sting on a wrong one (2D so it's heard anywhere).
+        private void PlaySubmitFeedback(bool correct)
+        {
+            var clip = correct ? m_correctSubmitClip : m_incorrectSubmitClip;
+            if (clip == null)
+            {
+                return;
+            }
+
+            if (m_submitAudioSource == null)
+            {
+                m_submitAudioSource = gameObject.AddComponent<AudioSource>();
+                m_submitAudioSource.playOnAwake = false;
+                m_submitAudioSource.spatialBlend = 0f;
+            }
+
+            m_submitAudioSource.PlayOneShot(clip);
         }
 
         // Poll the barrel the held detector is aimed at and record it as "scanned" (accuracy stat).

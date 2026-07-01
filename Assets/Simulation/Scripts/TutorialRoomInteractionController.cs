@@ -64,6 +64,9 @@ namespace SimJam.Tutorial
         [SerializeField, Min(100f)] private float m_hotBarrelActivityCps = 6000f;
         [SerializeField, Min(0)] private int m_teachingSubmitStepIndex = 6;
         [SerializeField, Range(4f, 35f)] private float m_teachingGuessConeAngle = 24f; // forgiving "general area" aim
+        [Header("Feedback audio")]
+        [SerializeField] private AudioClip m_correctSubmitClip;
+        [SerializeField] private AudioClip m_incorrectSubmitClip;
 
         [Header("Arms")]
         [SerializeField] private GameObject m_customArmsPrefab;
@@ -755,6 +758,7 @@ namespace SimJam.Tutorial
             {
                 m_teachingSolved = true;
                 m_tutorialManager.CompleteStepIfCurrent(m_teachingSubmitStepIndex);
+                PlaySubmitFeedback(true);
                 if (m_hotLabel != null)
                 {
                     var tm = m_hotLabel.GetComponent<TextMesh>();
@@ -764,6 +768,31 @@ namespace SimJam.Tutorial
                     }
                 }
             }
+            else if (aimed == m_inertBarrel)
+            {
+                PlaySubmitFeedback(false);
+            }
+        }
+
+        private AudioSource m_submitAudioSource;
+
+        // Win chime on the hot barrel, loss sting on the inert one (2D so it's heard anywhere).
+        private void PlaySubmitFeedback(bool correct)
+        {
+            var clip = correct ? m_correctSubmitClip : m_incorrectSubmitClip;
+            if (clip == null)
+            {
+                return;
+            }
+
+            if (m_submitAudioSource == null)
+            {
+                m_submitAudioSource = gameObject.AddComponent<AudioSource>();
+                m_submitAudioSource.playOnAwake = false;
+                m_submitAudioSource.spatialBlend = 0f;
+            }
+
+            m_submitAudioSource.PlayOneShot(clip);
         }
 
         // Lightweight aim test scoped to the two teaching barrels (cone from the detector sensor tip
