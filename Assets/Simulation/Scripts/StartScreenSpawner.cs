@@ -32,6 +32,10 @@ namespace SimJam
         [SerializeField] private float m_wallPanelHeight = 1.5f; // centre height of the wall-mounted menu
         [SerializeField, Min(0f)] private float m_transitionFadeSeconds = 0.6f;
 
+        [Header("Narration")]
+        [SerializeField] private AudioClip m_startNarrationClip; // "choose your movement" voiceover (auto-plays on load)
+        [SerializeField] private bool m_playNarrationOnStart = true;
+
         private Canvas m_canvas;
         private bool m_loading;
         private bool m_panelAnchored;
@@ -39,6 +43,7 @@ namespace SimJam
         private Button m_locomotionButton;
         private Button m_teleportButton;
         private Button m_continueButton;
+        private AudioSource m_narrationAudioSource;
 
         private void Start()
         {
@@ -53,6 +58,40 @@ namespace SimJam
             {
                 gameObject.AddComponent<StartRoomLocomotion>().Configure(new Vector2(4f, 4f));
             }
+
+            PlayStartNarration();
+        }
+
+        // Plays the start-screen voiceover once on load ("choose your movement"). 2D so it is audible
+        // wherever the player is standing. Safe no-op until the clip is assigned.
+        private void PlayStartNarration()
+        {
+            if (!m_playNarrationOnStart || m_startNarrationClip == null)
+            {
+                return;
+            }
+
+            EnsureNarrationAudioSource();
+            m_narrationAudioSource.clip = m_startNarrationClip;
+            m_narrationAudioSource.Play();
+        }
+
+        private void EnsureNarrationAudioSource()
+        {
+            if (m_narrationAudioSource != null)
+            {
+                return;
+            }
+
+            m_narrationAudioSource = GetComponent<AudioSource>();
+            if (m_narrationAudioSource == null)
+            {
+                m_narrationAudioSource = gameObject.AddComponent<AudioSource>();
+            }
+
+            m_narrationAudioSource.playOnAwake = false;
+            m_narrationAudioSource.loop = false;
+            m_narrationAudioSource.spatialBlend = 0f; // 2D — audible regardless of head position
         }
 
         private void LateUpdate()

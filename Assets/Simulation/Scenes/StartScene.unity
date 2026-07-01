@@ -742,6 +742,8 @@ MonoBehaviour:
   m_panelSize: {x: 960, y: 540}
   m_worldSpaceScale: 0.00225
   m_transitionFadeSeconds: 0.6
+  m_startNarrationClip: {fileID: 8300000, guid: a7d3f19c0b6e42583c1d9f4a8e2b5c70, type: 3}
+  m_playNarrationOnStart: 1
 --- !u!4 &937600910
 Transform:
   m_ObjectHideFlags: 0
