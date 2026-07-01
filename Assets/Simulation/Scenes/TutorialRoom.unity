@@ -15465,6 +15465,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   m_steps:
   - title: Welcome
+    narrationClip: {fileID: 8300000, guid: 70ba9d80febdc413dab6ccaa8cba12da, type: 3}
     caption: 'Welcome to the
 
       Nuclear Detection Training Simulation
@@ -15484,6 +15485,7 @@ MonoBehaviour:
       m_PersistentCalls:
         m_Calls: []
   - title: Introduction
+    narrationClip: {fileID: 8300000, guid: c5b5ba900bc294e6e95786f52bfe663d, type: 3}
     caption: 'Radiation detection equipment is used to inspect containers and identify
       radioactive materials.
 
@@ -15507,6 +15509,7 @@ MonoBehaviour:
       m_PersistentCalls:
         m_Calls: []
   - title: Tutorial Overview
+    narrationClip: {fileID: 8300000, guid: 383b08e187c5b46fca634905be1ee3c5, type: 3}
     caption: 'Before beginning the mission, you will complete a brief tutorial covering:
 
 
@@ -15548,6 +15551,7 @@ MonoBehaviour:
       m_PersistentCalls:
         m_Calls: []
   - title: 'Tutorial: Teleportation'
+    narrationClip: {fileID: 8300000, guid: 56c921af3a4db47c1a1258b7dce06660, type: 3}
     caption: 'Aim at the floor with your RIGHT controller and pull the RIGHT INDEX
       (front) trigger to teleport.
 
@@ -15565,6 +15569,7 @@ MonoBehaviour:
       m_PersistentCalls:
         m_Calls: []
   - title: 'Tutorial: Detector Operations'
+    narrationClip: {fileID: 8300000, guid: d5411309908034040aa0b77d4590b5a6, type: 3}
     caption: 'Reach toward the IdentiFINDER and hold the GRIP (hand trigger) on either
       controller to pick it up.
 
@@ -15599,6 +15604,7 @@ MonoBehaviour:
       m_PersistentCalls:
         m_Calls: []
   - title: Tutorial Complete
+    narrationClip: {fileID: 8300000, guid: cac636898f2114110b01aafd0781ff4f, type: 3}
     caption: 'You have completed the basic inspection tutorial.
 
 
@@ -15616,6 +15622,7 @@ MonoBehaviour:
       m_PersistentCalls:
         m_Calls: []
   - title: Mission Briefing
+    narrationClip: {fileID: 8300000, guid: dc6b757df45b74b81a1f7891f351c8ef, type: 3}
     caption: 'You will have 3 minutes to inspect the containers using the IdentiFINDER
       detector.
 
