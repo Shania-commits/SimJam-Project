@@ -2126,9 +2126,10 @@ namespace SimJam.BarrelSimulator
 
             for (var tier = 0; tier < tiers; tier++)
             {
-                // 0.58 m tier spacing leaves ~0.11-0.19 m of clear air above a 0.36 m-tall 5 gal
-                // barrel before the shelf above it (was 0.37 m, which left the barrel touching it).
-                var surfaceY = 1.05f + tier * 0.58f + UnityEngine.Random.Range(-0.02f, 0.02f);
+                // Lowered so the top tier is easier to reach in VR: base 0.85 m (was 1.05 m), 0.52 m
+                // tier spacing (was 0.58 m) still leaves ~0.10 m of clear air above a 0.36 m-tall 5 gal
+                // barrel before the shelf above it. Top of a 3-tier shelf drops ~2.21 m -> ~1.89 m.
+                var surfaceY = 0.85f + tier * 0.52f + UnityEngine.Random.Range(-0.02f, 0.02f);
                 if (TryCreateShelfAssetTier(shelfRoot.transform, tier, surfaceY, length, depth, out var shelfBounds))
                 {
                     shelfSlotSize = new Vector2(
