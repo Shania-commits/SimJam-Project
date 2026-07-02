@@ -1,6 +1,46 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+// =============================================================================
+// RadiationCountProfile.cs
+//
+// PURPOSE:  A reusable ScriptableObject "data asset" that supplies the pool of
+//   raw radiation "count" values used to seed each barrel's activity in the
+//   find-the-barrel game. A spawner asks it for a random count per barrel. It
+//   either draws from a hand-authored list of counts, or (when that list is
+//   empty) from a lazily built pool of random counts within a min/max range.
+//   Create instances via: Assets > Create > SimJam/Radiation Count Profile.
+//
+// HOW TO CUSTOMIZE:
+//   IMPORTANT: this is a ScriptableObject, so its [SerializeField] values are
+//   NOT stored in any .unity scene file. They live in the .asset file you
+//   create from the menu above. The defaults below are only used the moment a
+//   brand-new asset is created; editing a default here does NOT change an asset
+//   that already exists — select that .asset in the Project window and edit it
+//   in the Inspector (or edit the .asset YAML directly).
+//   NOTE: assigning a profile is OPTIONAL. Each spawner (RandomRoomBarrelSpawner,
+//   RadiationLabRoomSpawner, BasicVRRoomBarrelSpawner) has an
+//   m_radiationCountProfile field; if it is left empty, that spawner ignores
+//   this class entirely and uses its own built-in "Fallback counts" fields
+//   instead. To make this profile take effect, drag your .asset onto the
+//   spawner's m_radiationCountProfile slot in the scene's spawner GameObject.
+//
+//   Knobs (all on the .asset, edited in the Inspector):
+//   - explicitCountPool (List<int>): if you add ANY entries, they win — a random
+//     one is returned per barrel and the min/max generator is skipped entirely.
+//     Use this to pin down exact readings. Leave empty to use random generation.
+//   - countPoolSize (int, Min 1, default 2048): how many random counts to
+//     pre-generate/cache when explicitCountPool is empty. Larger = more variety.
+//   - minCount / maxCount (int, defaults 250 / 50000): inclusive lower/upper
+//     bounds for each randomly generated count. Bounds are auto-normalised, so a
+//     swapped min>max still works, and OnValidate() clamps maxCount >= minCount.
+//
+//   Hardcoded (NOT serialized — change in code, not the Inspector):
+//   - There are no other magic numbers here; the random draw itself is uniform.
+//     To change the sampling logic (e.g. weighting), edit GetRandomCount() and/or
+//     RebuildGeneratedPool() in this file.
+// =============================================================================
+
 namespace SimJam.BarrelSimulator
 {
     /// <summary>

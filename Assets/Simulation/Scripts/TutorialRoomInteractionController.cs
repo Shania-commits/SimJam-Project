@@ -5,6 +5,81 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 #endif
 
+// =============================================================================
+// TutorialRoomInteractionController.cs
+//
+// PURPOSE:  The "doing" half of the TutorialRoom scene (TutorialManager is the
+//   "saying" half). At runtime it stands up the OVR player rig, provides
+//   smooth-move / snap-turn / teleport locomotion, spawns a grabbable working
+//   identiFINDER detector plus two teaching barrels (one hot "SUBMIT THIS",
+//   one inert "DON'T SUBMIT") and the player's IK arms, then unlocks the gated
+//   TutorialManager steps as the player teleports, reads the detector, and
+//   correctly submits the radioactive barrel.
+//
+// HOW TO CUSTOMIZE:
+//   IMPORTANT — WHERE THE REAL VALUES LIVE: every [SerializeField] below is a
+//   DEFAULT only. The live values are baked into the TutorialRoom scene, so
+//   editing a default here does NOT change runtime behavior once the scene
+//   holds a value. To actually change these, open Assets/Scenes/TutorialRoom.unity
+//   in Unity, select the GameObject that carries this
+//   TutorialRoomInteractionController component (it also carries TutorialManager),
+//   and edit the fields in the Inspector (or hand-edit the component block in the
+//   scene .unity YAML). After Inspector edits, re-enter Play mode.
+//
+//   Step gating (map to the caption steps in TutorialManager) — Inspector,
+//   "Tutorial" header: m_teleportStepIndex (4), m_movementStepIndex (3),
+//   m_detectorStepIndex (5), m_teachingSubmitStepIndex (6, under "Teaching
+//   Barrels"). These MUST match the step order in the same object's
+//   TutorialManager; changing one without the other soft-locks the tutorial.
+//
+//   Movement mode is USUALLY NOT set here at all: ApplyMovementPreference() in
+//   Awake() loads MovementPreference (PlayerPrefs, chosen on the start screen)
+//   and overrides m_enableSmoothMove / m_enableTeleport. The serialized flags
+//   only apply when no start-screen choice was recorded (e.g. launching this
+//   scene directly). To force a mode regardless, edit MovementPreference / the
+//   start screen, not these flags. Speeds/turn: m_smoothMoveSpeed (1.35 m/s),
+//   m_snapTurnDegrees (30), m_snapTurnCooldown (0.35 s), m_thumbstickDeadzone
+//   (0.18) under "Movement"; m_maxTeleportDistance (10 m), m_teleportMarkerRadius
+//   (0.28) under "Teleport" — Inspector.
+//
+//   Play area: m_roomHalfExtents (3.55 x 3.55) and m_edgeMargin (0.28) clamp
+//   walking/teleport to the room ("Player" header, Inspector). Eye height for a
+//   flat non-VR editor camera: m_defaultEyeHeight (1.6).
+//
+//   Detector ("Detector" header, Inspector): m_spawnWorkingDetector toggles it,
+//   m_detectorPrefab picks the lab identiFINDER model (null = procedural wand),
+//   m_detectorHomePosition/Euler set its podium rest pose, m_detectorGrabRadius
+//   the grab reach, m_detectorHeldLocalPosition/Euler the in-hand grip,
+//   m_detectorCompletionCps (3) the reading needed to clear the detector step,
+//   m_enableDetectorAudio toggles geiger clicks.
+//
+//   Teaching barrels ("Teaching Barrels" header, Inspector): m_teachingBarrelPrefab
+//   (the shared 55-gal model; null = cylinder), m_hotBarrelPosition /
+//   m_inertBarrelPosition (kept far apart so the fields don't overlap),
+//   m_hotBarrelActivityCps (6000) the hot source strength, m_teachingGuessConeAngle
+//   (34 deg) the forgiving submit-aim cone. Feedback clips m_correctSubmitClip /
+//   m_incorrectSubmitClip play on right/wrong submit.
+//
+//   IK arms ("Arms" header, Inspector): m_customArmsPrefab (the Mixamo arms; if
+//   null, no arms spawn), m_armsChestOffset, m_armsBodyYawOffset, m_armsTargetReach
+//   (0.64), m_armsElbowPole, m_armsMatchHandToController, m_armsFingerCurlAngle
+//   (30) and m_armsFingerCurlSign tune how the arms hang, bend, and curl.
+//
+//   HARDCODED (not serialized — edit the C# and recompile, not the Inspector):
+//     - Teaching barrel target height ~0.9 m: const targetHeight in
+//       FitTeachingBarrel(); collider size 0.58 x 0.9 x 0.58 m: consts in
+//       EnsureLabBarrelCollider().
+//     - Teaching submit aim ray length (12 m): const maxDistance in
+//       GetTeachingAimedBarrel().
+//     - Snap-turn stick threshold (0.72): literal in UpdateMovement().
+//     - Label style/colours and "SUBMIT THIS" / "DON'T SUBMIT" / "SUBMITTED"
+//       text: CreateBarrelLabel() and SpawnTeachingBarrels()/UpdateTeachingSubmit().
+//     - Editor-only keyboard fallbacks (WASD move, Q/E turn, T teleport, N
+//       auto-submit) live in ReadMoveAxis()/ReadTurnAxis()/WasTeleportPressed()/
+//       UpdateTeachingSubmit() behind #if UNITY_EDITOR.
+//     - Hot source isotope "Cs-137": literal in SpawnTeachingBarrels().
+// =============================================================================
+
 namespace SimJam.Tutorial
 {
     /// <summary>

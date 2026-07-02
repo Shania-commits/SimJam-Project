@@ -1,6 +1,45 @@
 using System.Text;
 using UnityEngine;
 
+// =============================================================================
+// RadiationDetector.cs
+//
+// PURPOSE:  Runtime "brain" of the handheld identiFINDER survey meter. Every
+//   fixed 10 Hz tick it samples the shared RadiationField at the sensor tip,
+//   draws a Poisson count, smooths it into a CPS reading, and drives the
+//   on-meter screen text, geiger-click audio, and controller haptics. It also
+//   snaps the tool back to its start pose if it falls out of the world.
+//
+// HOW TO CUSTOMIZE:
+//   NOTE: This component is added and wired up entirely IN CODE at runtime by
+//   the scene spawner (via Initialize(...)); it is NOT a [SerializeField]-driven
+//   component sitting on a prefab/scene GameObject. That means NONE of the knobs
+//   below live in a .unity scene file or the Inspector — they are all hardcoded
+//   constants/literals in THIS file. To change them, edit the named method here.
+//
+//   - Tick rate (how often it samples): const TickInterval = 0.1f (10 Hz).
+//     Change the constant near the top of the class; it also feeds the
+//     count->CPS conversion in Tick().
+//   - Reading smoothing (how twitchy vs. laggy the needle is): the 0.16f lerp
+//     factor in Tick() (m_smoothedCps = Mathf.Lerp(...)). Higher = snappier.
+//   - Screen readout format (CPS digits, dose-rate decimals, units, bar-graph):
+//     edit the StringBuilder block in Tick(). Bar-graph scale is the log range
+//     0.5f (background floor) to 20000f (full scale), also in Tick().
+//   - Haptic "confirmation radius" (how close you must be before the controller
+//     buzzes): UpdateHaptics(). The base floorCps = 15f and the per-source
+//     source.ActivityCpsAt1m * 2.0f multiplier set the gate; the 1.30103f span
+//     controls how fast intensity ramps. Raise the 2.0x to shrink the buzz
+//     radius, lower it to widen the hint.
+//   - Buzz strength curve: the SetControllerVibration(0.3f + 0.7f*s,
+//     0.15f + 0.85f*s, ...) call in UpdateHaptics().
+//   - Fall-recovery threshold (when it respawns): the transform.position.y < -2f
+//     check in Update(). The respawn pose itself is passed in via Initialize()
+//     by the spawner, so change it where the spawner calls Initialize().
+//
+//   Dose-rate conversion, mean-CPS falloff, and the source list all live in the
+//   separate RadiationField class, not here.
+// =============================================================================
+
 namespace SimJam.BarrelSimulator
 {
     /// <summary>

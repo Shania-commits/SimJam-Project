@@ -7,6 +7,44 @@ using UnityEngine.UI;
 using UnityEngine.InputSystem;
 #endif
 
+// =============================================================================
+// StartScreenSpawner.cs
+//
+// PURPOSE:  Builds the VR title/start screen at runtime: an 8x8 m play room plus a
+//           wall-mounted world-space menu with a title, instructions, two movement-
+//           mode buttons (walk vs. teleport), and a gated Continue button. Picking a
+//           mode + Continue saves the movement preference, fades to black, and loads
+//           the first gameplay scene. One MonoBehaviour builds everything in code.
+//
+// HOW TO CUSTOMIZE:
+//   Most knobs below are [SerializeField], so their C# defaults are only fallbacks:
+//   once this spawner lives on a GameObject in the start scene, the scene's .unity
+//   YAML stores the actual values and OVERRIDES these defaults at runtime. To change
+//   real behavior, find the start-screen scene under Assets/ (the scene whose spawner
+//   loads "TutorialRoom"), select the GameObject holding StartScreenSpawner, and edit
+//   the fields in the Inspector (or hand-edit the matching values in the scene YAML).
+//     - m_titleText ("Radiation Detection Training"): heading on the panel.
+//     - m_sceneToLoad ("TutorialRoom"): scene loaded after Continue. Change this to
+//       point the start screen at a different next scene.
+//     - m_backgroundSprite / m_buttonSprite: optional UI art (BackgroundUI_Wide,
+//       Button_White); when empty the code falls back to flat dark/blue fills.
+//     - m_panelSize (960x540) + m_worldSpaceScale (0.00225): design pixel size and
+//       the world-units-per-pixel shrink factor for the world-space canvas.
+//     - m_wallPanelHeight (1.5): eye height (m) the menu is mounted at on the wall.
+//     - m_transitionFadeSeconds (0.6): duration of the fade-to-black before loading.
+//     - m_startNarrationClip + m_playNarrationOnStart (true): "choose your movement"
+//       voiceover and whether it auto-plays on load. Assign the clip in the Inspector.
+//   HARDCODED (NOT serialized — edit the C# here, no Inspector knob):
+//     - Instruction body text: literal strings in BuildUi().
+//     - Button labels, positions, sizes, and font caps: the CreateButton/CreateText
+//       calls in BuildUi(). Selected/unselected button tints: TintModeButton().
+//     - Panel wall position (x=0, z=3.9) and facing: UpdatePanelPose().
+//     - Play-room geometry (8x8 m, wall height 2.7, colours, light): BuildPlayRoom()
+//       and CreateRoomMaterial(). Room is built at WORLD origin to match the rig.
+//     - Editor-only desktop test keys (1/2 pick mode, Space/Enter start): Update() and
+//       WasStartKeyPressed(); these compile out of device builds.
+// =============================================================================
+
 namespace SimJam
 {
     /// <summary>

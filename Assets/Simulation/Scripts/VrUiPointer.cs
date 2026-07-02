@@ -2,6 +2,46 @@ using System;
 using UnityEngine;
 using UnityEngine.UI;
 
+// =============================================================================
+// VrUiPointer.cs
+//
+// PURPOSE:  A controller laser pointer for world-space uGUI buttons. Casts a ray
+//           from the right-hand controller, draws a laser beam + sphere cursor,
+//           and invokes the hovered Button's onClick when the click button is
+//           pressed. Deliberately bypasses Meta's OVRInputModule (that module uses
+//           the legacy Input class, which throws in this new-Input-System-only
+//           project). It is added automatically at runtime by TutorialManager /
+//           StartScreenSpawner, so there is no persistent GameObject carrying it in
+//           any scene file.
+//
+// HOW TO CUSTOMIZE:
+//   IMPORTANT NUANCE FOR THIS FILE: because VrUiPointer is created in code (via
+//   AddComponent) and is NOT saved on a GameObject in any .unity scene, the
+//   [SerializeField] DEFAULTS BELOW *do* take effect at runtime — there is no
+//   scene/Inspector override to fight with. Edit the defaults here to change
+//   behavior. (This is the opposite of most SimJam components, whose serialized
+//   values are pinned in the scene YAML and must be edited in the Unity Inspector.)
+//   If you later drag this component onto a saved GameObject, the scene value wins
+//   and you must edit it in the Inspector instead.
+//
+//   - m_maxLength (float, default 6): how far the laser reaches in metres before it
+//     stops looking for buttons. Edit the [SerializeField] default in this file.
+//   - m_clickButton (OVRInput.RawButton, default RIndexTrigger): which controller
+//     button counts as a "click" on the hovered UI button. Edit the default here.
+//     NOTE: the right index trigger also drives teleport locomotion, which is why
+//     other scripts read IsHoveringClickable to suppress teleport while on a button.
+//   - m_hitPadding (float 0..0.6, default 0.25): how much each button's rect is
+//     inflated when testing for a hit — larger = easier/forgiving aim. Edit here.
+//   - m_idleColor / m_hitColor (Color): laser + cursor tint when NOT / WHEN aimed at
+//     an interactable button (cyan vs green). Edit the [SerializeField] defaults here.
+//   - Cursor sizes are HARDCODED (not serialized): 0.05 when clickable, 0.028
+//     otherwise. Change them in Update() (the m_cursor.localScale line) and in the
+//     initial 0.028f value in BuildLaser().
+//   - Laser thickness / material / cursor shader are HARDCODED in BuildLaser()
+//     (widthMultiplier 0.008, "Sprites/Default" shader). Edit that method.
+//   - Button-list rescan interval is HARDCODED at 0.3s in Update(); edit the
+//     "m_nextScan = Time.unscaledTime + 0.3f" line to rescan more/less often.
+// =============================================================================
 namespace SimJam
 {
     /// <summary>

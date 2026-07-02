@@ -3,6 +3,55 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 #endif
 
+// =============================================================================
+// StartRoomLocomotion.cs
+//
+// PURPOSE:  Player movement for the pre-mission start room. Lets the player try
+//           all three locomotion styles before choosing one: smooth walk (left
+//           stick / WASD), snap turn (right stick / Q,E) and teleport (right
+//           index trigger / T). Moves the OVR rig, clamps it inside the room
+//           bounds, and draws a coloured teleport landing marker. Deliberately
+//           duplicated from the tutorial/lab movement so the real game loop stays
+//           untouched.
+//
+// HOW TO CUSTOMIZE:
+//   This component is created purely at RUNTIME: StartScreenSpawner.Start() calls
+//   gameObject.AddComponent<StartRoomLocomotion>().Configure(new Vector2(4f, 4f)).
+//   Because it is NOT authored into the StartScene as a scene object, there is no
+//   .unity scene YAML override for these fields — so the DEFAULT values in the
+//   [SerializeField] lines below ARE the runtime values, and editing them HERE does
+//   change behaviour. (There is no Inspector component to edit for this one.)
+//
+//   THE ONE EXCEPTION — room size: m_roomHalfExtents is overwritten immediately after
+//   creation by the hardcoded Configure(new Vector2(4f, 4f)) call in
+//   StartScreenSpawner.Start(), so editing the m_roomHalfExtents default below has NO
+//   effect. To change room bounds, edit that Configure(...) argument in
+//   StartScreenSpawner.cs.
+//
+//   Tunable [SerializeField] knobs (edit the default value in this file):
+//     - m_smoothMoveSpeed (1.35): walk speed in m/s for stick/WASD.
+//     - m_thumbstickDeadzone (0.18): stick magnitude before walk engages (drift guard).
+//     - m_snapTurnDegrees (30): yaw applied per snap-turn flick.
+//     - m_snapTurnCooldown (0.35): min seconds between snap turns.
+//     - m_maxTeleportDistance (10): furthest accepted teleport target, in metres.
+//     - m_teleportMarkerRadius (0.28): radius of the flat teleport marker cylinder.
+//     - m_roomHalfExtents (4,4): X/Z half-size box; OVERRIDDEN at runtime by
+//       Configure() — edit the Vector2 in StartScreenSpawner.Start() instead.
+//     - m_edgeMargin (0.3): inset from the room edge so the player can't clip walls.
+//     - m_defaultEyeHeight (1.6): eye height used ONLY in the editor camera-only
+//       fallback when no OVR rig exists.
+//
+//   HARDCODED values (not serialized — edit the named method to change):
+//     - Snap-turn / teleport activation thresholds: turn flick 0.72 in
+//       UpdateMovement(); teleport min hit distance 0.25 and invalid-fallback throw
+//       1.5 in UpdateTeleportTarget().
+//     - Teleport marker thickness 0.012 (EnsureTeleportMarker / UpdateTeleportTarget).
+//     - Valid/invalid marker colours (green / red) in EnsureTeleportMarker() via
+//       CreateMarkerMaterial().
+//     - Editor key bindings (WASD/Q/E/T) in ReadMoveAxis(), ReadTurnAxis(),
+//       WasTeleportPressed().
+// =============================================================================
+
 namespace SimJam
 {
     /// Self-contained start-room locomotion so the player can TRY both styles before choosing one.

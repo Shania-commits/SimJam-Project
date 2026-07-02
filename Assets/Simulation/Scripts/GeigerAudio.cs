@@ -1,5 +1,36 @@
 using UnityEngine;
 
+// =============================================================================
+// GeigerAudio.cs
+//
+// PURPOSE:  Procedurally synthesizes the handheld detector's Geiger "click" sound
+//           at runtime (no imported audio file) and fires a Poisson-random burst
+//           of clicks each frame whose density tracks the detector's live CPS, so
+//           the crackle gets faster as the meter nears the hot barrel.
+//
+// HOW TO CUSTOMIZE:
+//   IMPORTANT: this component is NEVER placed in a .unity scene. It is added to the
+//   detector object at RUNTIME via AddComponent<GeigerAudio>() by the spawners
+//   (RadiationLabRoomSpawner.cs, ~line 1558, and TutorialRoomInteractionController.cs,
+//   ~line 676). It has NO [SerializeField] fields, so there is nothing to tune in the
+//   Unity Inspector or scene YAML — EVERY knob below is HARDCODED in this C# file and
+//   only changes take effect by editing the named method here.
+//
+//   - Loudness / spatial falloff: edit Awake(). m_audioSource.volume (0.85f) is base
+//     loudness; minDistance (0.1f) / maxDistance (6f) / rolloffMode set how quickly the
+//     click fades with distance from the meter; spatialBlend (1f) keeps it fully 3D.
+//   - Click TIMBRE (how each tick sounds): edit the waveform loop in Awake(). The
+//     0.003f click length, the 0.0008f decay time constant, the noise weight (0.7f),
+//     and the 5500f Hz tone frequency (0.5f mix) shape the "tick". Peak-normalized to 0.8f.
+//   - Max click RATE: edit SetRate() — the incoming CPS is Mathf.Clamp(...,0f,120f), so
+//     120 is the ceiling on how frenetic the crackle can get. Callers (RadiationDetector)
+//     feed their smoothed CPS in each frame.
+//   - Per-frame click BUDGET & jitter: edit Update(). Clicks per frame are capped at 3
+//     (the "if (n > 3)" line); pitch jitter is 0.95f + 0.13f*rand and volume jitter is
+//     0.8f + 0.2f*rand — widen these for more variation, narrow for a steadier tone.
+//   - Click STATISTICS: SamplePoisson() models random decay arrivals; usually leave as-is.
+// =============================================================================
+
 namespace SimJam.BarrelSimulator
 {
     /// <summary>

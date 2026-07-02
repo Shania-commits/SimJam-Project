@@ -1,5 +1,41 @@
 using UnityEngine;
 
+// =============================================================================
+// RadiationSource.cs
+//
+// PURPOSE:  The invisible "hot" marker attached at runtime to the ONE hidden
+//           radioactive barrel. It has no renderer/label of its own; it just
+//           registers with the static RadiationField (OnEnable) so the handheld
+//           detector can compute counts from it via inverse-square + occlusion.
+//           It carries the source's activity (CPS at 1 m), isotope name, and
+//           emission point (barrel bounds centre).
+//
+// HOW TO CUSTOMIZE:
+//   IMPORTANT: This component has NO [SerializeField] fields, so it is NEVER
+//   stored in a .unity scene file. It is added purely in code and its values
+//   are set by Configure(activityCpsAt1m, isotopeName) at spawn time. Editing
+//   the class defaults below (ActivityCpsAt1m = 5000f, IsotopeName = "Cs-137")
+//   has NO effect at runtime, because Configure() always overwrites them. To
+//   change what the player actually experiences, edit the CALLERS instead:
+//
+//   - Source strength (Lab scene): the activity passed in is a random log-uniform
+//     value between m_minSourceActivityCps (default 1500) and m_maxSourceActivityCps
+//     (default 30000). Those two ARE [SerializeField] on RadiationLabRoomSpawner,
+//     so their live values live in the Lab scene YAML — edit them on the spawner
+//     GameObject's RadiationLabRoomSpawner component in the Unity Inspector for the
+//     Lab scene, NOT here. (Set in RadiationLabRoomSpawner.AssignHotSource.)
+//   - Source strength (Tutorial scene): comes from m_hotBarrelActivityCps on
+//     TutorialRoomInteractionController; edit that component in the Tutorial scene.
+//   - Isotope label: chosen at random from the HARDCODED array
+//     s_isotopeNames = { "Cs-137", "Co-60", "Ir-192", "Am-241" } in
+//     RadiationLabRoomSpawner (not serialized) — edit that array to change the pool.
+//     The Tutorial path passes a hardcoded "Cs-137" in
+//     TutorialRoomInteractionController; edit that literal to change it.
+//   - EmissionPoint is derived (barrel renderer bounds centre, else transform
+//     position) and is not tunable; change it only by editing the EmissionPoint
+//     getter method in this file.
+// =============================================================================
+
 namespace SimJam.BarrelSimulator
 {
     /// The hidden radioactive source inside a barrel. Adds no renderer, label, or any

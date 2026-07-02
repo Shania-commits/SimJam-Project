@@ -1,6 +1,49 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+// =============================================================================
+// ProceduralTextureLibrary.cs
+//
+// PURPOSE:  Static, lazily-built cache of code-generated textures (no image
+//           assets) that dress the runtime lab: floor/wall/wood/ceiling
+//           surfaces, hazard stripes, EXIT + warning + safety signage, the
+//           detector plaque, blob shadows, and per-SIZE barrel labels. Barrel
+//           labels are deliberately identical per size so the hidden radioactive
+//           drum can never be spotted by eye -- only by the detector.
+//
+// HOW TO CUSTOMIZE:
+//   NOTE: This is a plain static class, NOT a MonoBehaviour. Nothing here is a
+//   [SerializeField], so NONE of these values live in any .unity scene file or
+//   Inspector -- every knob is HARDCODED in this C# file. Editing the numbers
+//   below IS how you change behavior; there is no scene/GameObject/component to
+//   touch. Textures are cached in the static s_* fields on first access, so
+//   changes only take effect on a fresh play session.
+//
+//   - Surface look & seed: each surface is drawn by its own Build* method and
+//     seeded by the "new System.Random(NNNN)" literal inside it -- change the
+//     seed to reroll the pattern. Concrete base gray / crack count: BuildConcrete512
+//     (v = 0.62f base, "for (int c = 0; c < 5 ...)" cracks). Wall base white:
+//     BuildPaintedWall256 (v = 0.92f). Wood plank color: BuildWoodGrain256
+//     (r/g/b 0.46/0.31/0.18, 64px planks). Ceiling: BuildCeilingTile256
+//     (0.89f base, 170 pinholes).
+//   - Hazard stripes: BuildHazardStripe128 -- band width is the "/ 16" in
+//     "((x + y) / 16) % 2", yellow/black RGB set in the MakeColor calls.
+//   - Signage text & colors: the literal strings and MakeColor() calls inside
+//     BuildExitSign128, BuildRadiationPoster256, BuildSafetyPoster256, and
+//     BuildDetectorPlaque256 (e.g. "EXIT", "CAUTION", "RADIATION AREA",
+//     "SAFETY FIRST", amber detector text).
+//   - Barrel size labels: the three public BarrelLabel5/30/55 properties call
+//     BuildBarrelLabel("5 GAL"/"30 GAL"/"55 GAL", seed). Change the size caption
+//     or seed there; the shared placard layout (border, blue header band,
+//     "STEEL DRUM", "UN 1A2 Y" spec line) is hardcoded in BuildBarrelLabel.
+//     Keep all sizes visually uniform or you risk revealing the hidden source.
+//   - Texture resolution/quality: each Build* method has a "const int size";
+//     GPU wrap/filter/aniso/mipmaps are set once in CreateTexture.
+//   - Font/text rendering: the built-in 5x7 bitmap glyphs live in the Font
+//     dictionary; DrawText handles centering and integer "scale". Add glyphs to
+//     Font to support new characters in captions.
+// =============================================================================
+
 namespace SimJam.BarrelSimulator
 {
     /// <summary>

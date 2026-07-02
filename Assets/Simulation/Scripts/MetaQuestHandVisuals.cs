@@ -2,6 +2,51 @@ using System;
 using System.Reflection;
 using UnityEngine;
 
+// =============================================================================
+// MetaQuestHandVisuals.cs
+//
+// PURPOSE:  Static helper that builds and manages the authentic Meta Quest hand
+//   meshes (OVRHand + OVRSkeleton + OVRMesh + SkinnedMeshRenderer + OVRMeshRenderer)
+//   under the OVRCameraRig's hand anchors, so the player sees natural, controller-
+//   driven hands while holding the identiFINDER detector. It forces the hand mesh
+//   to stay rendered even when optical hand-tracking confidence drops (which is
+//   exactly when a controller is in hand).
+//
+// HOW TO CUSTOMIZE:
+//   NOTE: This is a static utility class, NOT a MonoBehaviour/[SerializeField]
+//   component. NONE of these values live in the .unity scene files, so unlike most
+//   scripts in this project you DO edit them here in C#. It has no Inspector
+//   presence; a spawner calls TryEnsure(...) at runtime. The only exception is the
+//   OVRManager settings poked in ConfigureControllerDrivenHands, which read/write a
+//   live OVRManager in the scene at runtime.
+//
+//   - OverrideHandMaterial (public static property, this file): if the caller sets
+//     it before calling TryEnsure, that material is used for BOTH hand meshes
+//     instead of the code-built fallback skin. Assign it from the calling spawner
+//     (e.g. to the SDK's Meta/Lit BasicHandMaterial). Leave null to keep the
+//     fallback. Search callers of `MetaQuestHandVisuals` to find where to set it.
+//   - scale (parameter of TryEnsure / CreateHand): overall hand-mesh scale, passed
+//     in by the caller. Clamped to a floor of 0.1 in CreateHand
+//     (localScale = Vector3.one * Mathf.Max(0.1f, scale)). Change the number the
+//     caller passes; change the 0.1f floor in CreateHand.
+//   - Fallback skin colours (HARDCODED, not serialized): edit the Color literals in
+//     the LeftHandMaterial / RightHandMaterial properties near the bottom of this
+//     file (currently new Color(0.82f,0.72f,0.62f) left and (0.80f,0.70f,0.60f)
+//     right). Smoothness (0.35f) is set in CreateHandMaterial. These only apply when
+//     OverrideHandMaterial is null.
+//   - Always-render behavior (HARDCODED): CreateHand sets OVRMeshRenderer
+//     _confidenceBehavior = None and _systemGestureBehavior = None, and OVRHand
+//     m_showState = Always, so the mesh never hides when a controller is held.
+//     Change these enum values in CreateHand if you want confidence-based hiding.
+//   - Controller-driven poses (runtime scene state): ConfigureControllerDrivenHands
+//     enables OVRManager.SimultaneousHandsAndControllersEnabled,
+//     launchSimultaneousHandsControllersOnStartup, and
+//     controllerDrivenHandPosesType = Natural on the live OVRManager, plus the
+//     matching OVRPlugin calls. Edit that method to change pose sourcing.
+//   - Shader is "Standard" (built-in pipeline) in CreateHandMaterial — do NOT swap
+//     to a URP/Lit lookup here or the hands render magenta.
+// =============================================================================
+
 namespace SimJam.BarrelSimulator
 {
     /// <summary>

@@ -1,6 +1,57 @@
 using SimJam.BarrelSimulator;
 using UnityEngine;
 
+// =============================================================================
+// TutorialRoomDresser.cs
+//
+// PURPOSE:  Procedurally "dresses" the TutorialRoom scene at runtime (and in the
+//           editor via [ExecuteAlways]). Builds ALL the static, non-interactive set
+//           decoration -- utility tables, back-wall shelving, storage bins, clutter,
+//           whiteboard, radiation poster, wall clock, floor scuffs/dust, accent
+//           lights, and the detector pedestal -- out of Unity primitives + runtime
+//           materials, so the near-empty bootstrap scene looks like a real survey bay.
+//           The interactive props (detector, teaching barrels) are placed elsewhere by
+//           TutorialRoomInteractionController; this component owns only the backdrop.
+//
+// HOW TO CUSTOMIZE:
+//   CRITICAL: the [SerializeField] defaults below are ALSO baked into the scene YAML.
+//   Editing a default in this C# file does NOT change what runs -- the scene's saved
+//   value wins. To change these at runtime, edit the TutorialRoomDresser component in
+//   the Unity Inspector (the TutorialRoom scene, on the GameObject that carries this
+//   dresser), or edit the same field in the .unity scene file directly.
+//
+//   Inspector-tunable [SerializeField] fields (edit on the component, not here):
+//     - m_barrel55Prefab / m_barrel30Prefab / m_barrel5Prefab ("Prefabs"): optional
+//       drum models for the (now-disabled) floor barrel clusters; null = procedural
+//       cylinder fallback. Not used by the currently-active build steps.
+//     - m_barrelLargeMetal / m_barrelLargePaint ("Barrel materials"): assign the lab's
+//       authored barrel materials so tutorial barrels match the lab; empty = procedural
+//       fallback colors.
+//     - m_buildInEditor ("Generation"): rebuild the dressing live while editing (not in
+//       Play mode) for authoring preview.
+//     - m_buildAtRuntime ("Generation"): build the dressing once at runtime, in Awake.
+//
+//   HARDCODED (not serialized) -- change here in code, then rebuild via the component's
+//   right-click "Rebuild Tutorial Dressing" context menu or the SimJam > Rebuild
+//   Tutorial Room Dressing editor menu:
+//     - Layout / poses / sizes of EVERY prop: literal positions, scales, and rotations
+//       are passed inline in the Build* methods (BuildAisle, BuildEnvironmentalWear,
+//       BuildTrainingTables, BuildBackWallShelving, BuildClutter, BuildPostersAndWallMarks,
+//       BuildLighting, BuildWhiteboard, BuildWallClock, etc.). Edit those calls to move
+//       or resize decoration.
+//     - Material colors / metallic / smoothness: the CreateMaterial(...) calls in
+//       CreateMaterials().
+//     - Shelf layout: width/depth/shelfHeights consts in BuildBackWallShelving.
+//     - Accent lights: color/intensity/range args in BuildLighting.
+//     - DetectorPodiumFloor (static readonly): X/Z of the detector pedestal -- MUST stay
+//       matched to TutorialRoomInteractionController.m_detectorHomePosition or the detector
+//       floats off its podium. FloorBarrel55/30Scale + ShelfSmallBarrelScale (static
+//       readonly) match the lab's drum sizes.
+//     - GeneratedRootName const: name of the child GameObject holding all generated props.
+//     - HideLegacySceneProps(): disables any scene object whose name Contains("Barrel") or
+//       equals "shelf"; adjust that name match if legacy props should survive.
+// =============================================================================
+
 namespace SimJam.Tutorial
 {
     /// <summary>

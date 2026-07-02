@@ -10,6 +10,60 @@ using UnityEngine.UI;
 using UnityEngine.InputSystem;
 #endif
 
+// =============================================================================
+// TutorialManager.cs
+//
+// PURPOSE:  Drives the guided TutorialRoom scene. Owns the ordered list of
+//           tutorial steps (screens), builds a world-space caption panel at
+//           runtime, advances/rewinds between steps, gates the interactive
+//           steps until completed, plays per-step narration, and on the final
+//           step fades to black and loads the main mission scene. Attach this
+//           to a single GameObject in the tutorial scene.
+//
+// HOW TO CUSTOMIZE:
+//   All [SerializeField] fields below are ALSO baked into the tutorial .unity
+//   scene, so editing a DEFAULT here does NOT change runtime behavior once the
+//   scene stores a value. To change behavior for real: open the tutorial scene,
+//   select the GameObject holding TutorialManager, and edit the field in the
+//   Inspector (or edit the MonoBehaviour block in the scene YAML). Key knobs:
+//
+//   - The tutorial screens (m_steps, "Tutorial screens" header): the whole
+//     lesson content. Each TutorialStep has title, caption (body), an optional
+//     backgroundImage and narrationClip, nextButtonLabel, canGoBack, canPause,
+//     and requireCompletionToContinue (gates Continue on an interactive task).
+//     Edit the list on the component in the Inspector. NOTE: if the list is left
+//     EMPTY, a hardcoded 9-step default sequence is seeded at runtime — to change
+//     that fallback wording/order (Welcome ... Mission Briefing) edit the
+//     AddStarterSteps() method below.
+//   - m_startingStepIndex: which step opens first. Inspector field.
+//   - m_missionSceneName ("Mission hand-off", default "RadiationLabRoom"): scene
+//     loaded when the tutorial finishes; it MUST be added to File > Build
+//     Settings for LoadScene-by-name to work. m_loadMissionSceneOnFinish toggles
+//     whether it loads at all; m_transitionFadeSeconds is the fade-to-black time.
+//     Inspector fields.
+//   - VR panel placement ("VR panel placement" header): m_useWorldSpaceCanvas
+//     (world-space VR panel vs. flat screen-space overlay), m_panelWallDistance
+//     (how far out on the wall it anchors), m_panelVerticalOffset, m_panelSize,
+//     and m_worldSpaceScale (pixels->metres). Inspector fields. m_panelDistance
+//     is legacy/unused.
+//   - Narration: m_playNarrationOnStepStart toggles auto-play; the AudioSource is
+//     auto-created if m_narrationAudioSource is unassigned. Inspector fields.
+//   - m_pauseWithTimeScale ("Runtime controls"): whether pausing sets
+//     Time.timeScale to 0. Inspector field.
+//   - UI art (m_defaultCaptionBackgroundSprite, m_buttonSprite) and the optional
+//     UI reference fields let you supply your own panel widgets instead of the
+//     auto-built ones (m_createDefaultUiIfMissing builds defaults when missing).
+//     Assign these on the component in the Inspector.
+//
+//   HARDCODED (not serialized — edit the named method to change):
+//   - Default 9-step tutorial content: AddStarterSteps() (only used if m_steps
+//     is empty).
+//   - Panel/button/text colors, sizes, and layout of the runtime-built UI:
+//     EnsureDefaultUi(), CreateButton(), CreateText(), CreatePausePanel().
+//   - Editor desktop keyboard fallbacks (Space/Enter advance, Backspace back,
+//     Escape pause): WasAdvanceKeyPressed(), WasBackKeyPressed(),
+//     WasPausePressed().
+// =============================================================================
 namespace SimJam.Tutorial
 {
     /// <summary>

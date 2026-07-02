@@ -1,5 +1,43 @@
 using UnityEngine;
 
+// =============================================================================
+// ProceduralArmRig.cs
+//
+// PURPOSE:
+//   Runtime-built pair of stubby VR arms made from plain Unity primitives (spheres
+//   + cylinders) — no Animator, no skinned mesh. Every LateUpdate it anchors a
+//   shoulder near the head, aims the wrist at the OVR controller, and solves a
+//   two-bone IK chain so the player sees arms reaching toward whatever they hold
+//   (e.g. the identiFINDER detector). It is the zero-dependency fallback for
+//   MixamoArmRig.
+//
+// HOW TO CUSTOMIZE:
+//   NOTE: this class has NO [SerializeField] fields, so NOTHING here is stored in
+//   any .unity scene file and there is no Inspector component to tweak. Every knob
+//   is a C# constant or a hardcoded literal in this file — edit the code below and
+//   the change takes effect. The component is created at runtime (never placed in
+//   a scene) by RadiationLabRoomSpawner.EnsureArmRig() in
+//   Assets/Simulation/Scripts/RadiationLabRoomSpawner.cs.
+//
+//   - Bone lengths / thickness: the `private const` values at the top of the class
+//     (UpperArmLength, ForearmLength, UpperArmRadius, ForearmRadius, WristRadius,
+//     all in metres) size the IK segments and the cylinder meshes. Edit the consts.
+//   - Shoulder / wrist / hand placement: hardcoded Vector3 offsets inside
+//     LateUpdate() (shoulder = below/behind the head; wristTarget and handEnd =
+//     nudged behind/under the controller). Edit those literals to reposition.
+//   - How the elbow bends: the "pole hint" Vector3 and the 0.05 / a+b-0.01 distance
+//     clamp inside SolveElbow() control the natural down-and-out bend and prevent
+//     over-extension. Edit them there.
+//   - Joint marker sizes (shoulder/elbow spheres): the scale Vector3 args passed to
+//     CreatePart() inside Initialize(). Edit those literals.
+//   - Arm colours/materials: NOT set here. The sleeve + skin materials are built and
+//     passed in by RadiationLabRoomSpawner.EnsureArmRig() (the two CreateMaterial
+//     calls). Change the colours there.
+//   - Whether these arms appear at all: also decided in the spawner — EnsureArmRig()
+//     skips this rig when UseCustomArms is true or m_showArms is false (Mixamo arms
+//     take over). Change that in RadiationLabRoomSpawner.
+// =============================================================================
+
 namespace SimJam.BarrelSimulator
 {
     /// <summary>

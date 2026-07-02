@@ -1,5 +1,45 @@
 using UnityEngine;
 
+// =============================================================================
+// RoomDecorator.cs
+//
+// PURPOSE:  Static helper (NOT a MonoBehaviour) that layers purely-cosmetic detail
+//   props onto the runtime-built rooms: baseboards, wooden door frames, a glowing
+//   exit sign, floor hazard stripes, ceiling conduits/junction boxes, the detector
+//   pedestal (with its point light), and cheap fake "blob" ground shadows. The scene
+//   spawner calls these static methods after the room shells exist so the lab and
+//   spawn (office) rooms look furnished instead of like bare boxes.
+//
+// HOW TO CUSTOMIZE:
+//   This file has NO [SerializeField] fields and is NOT attached to any GameObject,
+//   so nothing here is exposed in the Unity Inspector or stored in the .unity scene
+//   files. EVERY tunable value below is HARDCODED as a literal in C# — editing it here
+//   IS the only way to change it, and it takes effect the moment the scene rebuilds at
+//   runtime. (There is no scene-YAML override to fight with for this class.) The
+//   spawner MonoBehaviour that invokes these methods is what lives in the scene; room
+//   sizes/door dimensions are passed IN as arguments, so change those on the spawner.
+//
+//   - Colors / materials (dark baseboard, brown wood, green exit sign, hazard stripe,
+//     grey conduit, concrete pedestal, blue accent): the Color literals + texture refs
+//     in the createMaterial(...) calls at the top of DecorateOfficeRoom,
+//     DecorateSpawnRoom, and BuildDetectorPedestal. Textures come from
+//     ProceduralTextureLibrary (e.g. WoodGrain256, ExitSign128, HazardStripe128,
+//     Concrete512, DetectorPlaque256) — edit that library to change the artwork itself.
+//   - Baseboard / conduit / door-frame geometry: the position & scale Vector3 literals
+//     in the CreatePart(...) calls inside DecorateOfficeRoom / DecorateSpawnRoom. The
+//     numeric offsets (0.05f, 0.06f, 0.018f, 0.07f, etc.) are thickness/inset tweaks.
+//   - Pedestal size & the detector's rest height: the base/column/cap Vector3 scales in
+//     BuildDetectorPedestal, and the PedestalTopHeight = 1.02f const near the top of the
+//     class (the spawner reads that to sit the detector on the cap — keep it in sync
+//     with the cap position/scale if you resize the pedestal).
+//   - Pedestal spotlight look: the Light setup in BuildDetectorPedestal
+//     (localPosition y=1.7f, color, intensity 0.85f, range 2.0f, ForceVertex, no shadows).
+//   - Blob-shadow appearance: AddBlobShadow uses the "SimJamBlobShadow" material from a
+//     Resources folder plus the BlobShadow64 texture; radius/height are the radius arg
+//     and the +0.006f floor offset. If the Resources material is missing this returns
+//     null and no shadow is drawn.
+// =============================================================================
+
 namespace SimJam.BarrelSimulator
 {
     /// <summary>

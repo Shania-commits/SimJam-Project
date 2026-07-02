@@ -1,5 +1,33 @@
 using UnityEngine;
 
+// =============================================================================
+// RadiationOccluder.cs
+//
+// PURPOSE:  Marks a scene object (walls, shelves, drums, etc.) as a partial
+//           radiation shield. When RadiationField casts a ray from the hidden
+//           source to the detector, any RadiationOccluder in the way multiplies
+//           the surviving signal by its attenuation factor, so props behind
+//           cover read weaker on the handheld detector.
+//
+// HOW TO CUSTOMIZE:
+//   - m_attenuationFactor ([SerializeField, Range(0..1)], default 0.5):
+//     the fraction of signal that PASSES THROUGH this object.
+//     0 = a perfect shield (blocks everything), 1 = fully transparent.
+//     WHERE: This component is added and configured AT RUNTIME by the scene
+//     spawner via the static Attach(target, attenuationFactor) helper below —
+//     it is not authored on a GameObject in a .unity scene. To change how much
+//     a given prop shields, edit the attenuationFactor value passed into
+//     RadiationOccluder.Attach(...) at each call site in the spawner
+//     MonoBehaviour that builds that scene (search the spawner scripts for
+//     "RadiationOccluder.Attach"). Changing the 0.5 default here only affects
+//     occluders created WITHOUT an explicit factor, which currently do not
+//     exist because Attach always sets one.
+//   - The attenuation is CONSUMED by the raycast/occlusion code in
+//     RadiationField (not here). To change HOW factors combine along a ray
+//     (e.g. multiply vs. add) or which layers are tested, edit RadiationField,
+//     not this file.
+// =============================================================================
+
 namespace SimJam.BarrelSimulator
 {
     /// Marks an object that attenuates radiation passing through it. The factor is the

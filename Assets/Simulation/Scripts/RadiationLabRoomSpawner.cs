@@ -4,6 +4,73 @@ using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Serialization;
 
+// =============================================================================
+// RadiationLabRoomSpawner.cs
+//
+// PURPOSE:  The one MonoBehaviour that builds and runs the RadiationLabRoom scene
+//   at runtime. It constructs the two-room lab (main lab + adjacent spawn/waiting
+//   room), scatters visually-identical 55/30/5-gallon barrels across the floor,
+//   tables and wall shelves, hides exactly ONE radioactive source among them,
+//   spawns the grabbable identiFINDER detector on its pedestal, the wall START
+//   button and the swinging door, wires up VR hands/arms and locomotion, and owns
+//   the Waiting -> Playing -> Resolved find-the-barrel game loop plus the
+//   end-of-round stats screen.
+//
+// HOW TO CUSTOMIZE:
+//   CRITICAL: nearly every knob below is a [SerializeField], so its value is ALSO
+//   baked into the scene file. Editing the C# default here does NOT change what
+//   the game does — the scene's saved value wins. To actually change behavior,
+//   open scene "Assets/Simulation/Scenes/RadiationLabRoom.unity", select the
+//   GameObject named "RadiationLabRoomSpawner" (it holds this component), and edit
+//   the field in the Inspector (or hand-edit the same value in the scene's YAML).
+//   Truly hardcoded values (const / literals in a method) are called out below with
+//   the exact method to edit — those you change here in the C# file.
+//
+//   - Round difficulty (Inspector, "Game loop" + "Scenario randomization" headers):
+//       m_maxTries controls guesses per round; m_enableRoundTimer /
+//       m_roundDurationSeconds control the ~3-minute clock; m_minBarrels /
+//       m_maxBarrels set how many drums spawn; m_minTables/m_maxTables and
+//       m_minShelfUnits/m_maxShelfUnits set how much furniture appears;
+//       m_guessConeAngle / m_guessRayLength set how forgiving the "point at a
+//       barrel" aim is.
+//   - Hidden source (Inspector, "Hidden radiation source" header):
+//       m_minSourceActivityCps / m_maxSourceActivityCps set the log-uniform
+//       activity range. The isotope label is picked from the HARDCODED array
+//       s_isotopeNames (top of this file) inside AssignHotSource(); edit that array
+//       here in C# to change the isotope names.
+//   - Room scale (Inspector, "Room scale" header): m_roomSizeFeet /
+//       m_spawnRoomSizeFeet (feet), m_wallHeight, m_wallThickness, m_floorThickness.
+//       Set m_buildRoomGeometry false to keep an authored scene instead of building
+//       one at runtime. FeetToMeters / DefaultRoomFeet are hardcoded consts here.
+//   - Door + START button (Inspector, "Connecting door" / "Game loop"):
+//       m_doorwayWidth/Height, m_doorOpenAngle, m_doorLatchAngle,
+//       m_startButtonPressRadius (bigger = easier to poke). The button's world
+//       position, size and text ("START"/"IN ROUND") are HARDCODED in
+//       EnsureStartButton() and RefreshStartButtonVisual().
+//   - Detector (Inspector, "Detector" header): assign m_detectorPrefab to use the
+//       real identiFINDER (null = procedural wand), m_detectorTargetHeight scales
+//       it, m_detectorHeldLocalPosition / m_detectorHeldLocalEuler set the held
+//       pose, m_pedestalOffsetFromSpawnCenter places the pedestal.
+//   - Barrels' look (Inspector, "Barrel prefabs" header): assign the 3 prefabs in
+//       m_barrelPrefabs and the PBR materials (m_barrelLargeMetal/Paint,
+//       m_barrelSmallMetal/Paint); leave materials null to keep procedural tints.
+//       The per-size physical dimensions, tint colors and selection weights live in
+//       the HARDCODED BuildBarrelSpec/spec table in this file (search "BarrelSpec"),
+//       not in the Inspector.
+//   - Movement (Inspector, "Locomotion" header): m_enableSmoothMove /
+//       m_enableTeleport, m_smoothMoveSpeed, m_snapTurnDegrees, m_maxTeleportDistance.
+//       NOTE: at runtime ApplyMovementPreference() OVERRIDES these two toggles with
+//       the smooth-vs-teleport choice the player made on the start screen (saved in
+//       PlayerPrefs via MovementPreference); to ignore that choice, edit
+//       ApplyMovementPreference() here in C#.
+//   - Custom skinned arms (Inspector, "Custom arms (Mixamo FBX)" header): assign
+//       m_customArmsPrefab to replace the default Meta hands, then tune
+//       m_customArmsChestOffset / m_customArmsBodyYawOffset / m_customArmsTargetReach
+//       on-device.
+//   - Determinism: enable m_useFixedSeed + set m_fixedSeed (Inspector, "Scenario
+//       randomization") to reproduce the exact same layout every round.
+// =============================================================================
+
 namespace SimJam.BarrelSimulator
 {
     /// Radiation-training variant of BasicVRRoomBarrelSpawner (which is kept untouched as a

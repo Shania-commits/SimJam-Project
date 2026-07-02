@@ -5,6 +5,65 @@ using Meta.XR.MRUtilityKit;
 using PassthroughCameraSamples.MultiObjectDetection;
 using UnityEngine;
 
+// =============================================================================
+// RandomRoomBarrelSpawner.cs
+//
+// PURPOSE:  Mixed-reality "play in your own room" variant of the barrel game.
+//   Loads the Quest's scanned room (Meta MR Utility Kit / MRUK) at runtime and
+//   scatters a random number of radioactive-barrel props on valid floor spots,
+//   each with a random radiation count and a head-locked status label. Controller
+//   buttons reshuffle (A/pinch), clear (B/middle-pinch), re-roll counts (X), and
+//   grow/shrink barrels (right thumbstick up/down).
+//
+// HOW TO CUSTOMIZE:
+//   CRITICAL: every knob below is a [SerializeField], so its DEFAULT here is only
+//   used the first time the component is added. Once this script sits on a
+//   GameObject in a .unity scene, the scene stores its own value and editing the
+//   default in THIS file changes nothing at runtime. To actually change behavior,
+//   find the scene that contains this spawner (search the Assets/Simulation scenes
+//   for a GameObject carrying the RandomRoomBarrelSpawner component) and edit the
+//   field in the Unity Inspector (or the corresponding value in the scene YAML).
+//
+//   Barrel look & size:
+//   - m_barrelPrefab: the drum prefab spawned per barrel; leave empty to fall back
+//     to a yellow-cylinder placeholder (built in CreatePlaceholderBarrel()).
+//   - m_barrelSpawnScale: local scale of each spawned barrel.
+//   - m_runtimeScaleStep / m_runtimeScaleLimits: how much the thumbstick grows or
+//     shrinks barrels per press, and the min/max scale clamp.
+//   - m_showDebugCountLabels: toggles the floating per-barrel radiation-count text.
+//
+//   How many barrels & orientation:
+//   - m_minBarrels / m_maxBarrels: inclusive range for barrels spawned per run.
+//   - m_uprightProbability: chance a barrel stands upright vs. lies on its side.
+//   - m_useFixedSeed / m_fixedSeed: enable for reproducible placement/orientation.
+//
+//   Where barrels may land (placement constraints):
+//   - m_floorEdgeClearance, m_wallClearance, m_sceneVolumeClearance,
+//     m_barrelSpacing, m_playerClearance: minimum distances from floor edges,
+//     walls, furniture volumes, other barrels, and the player's head.
+//   - m_maxAttemptsPerBarrel: sampling tries before giving up on one barrel.
+//   - m_uprightFloorOffset / m_sidewaysFloorOffset: how high above the floor an
+//     upright vs. sideways barrel sits.
+//
+//   Radiation counts:
+//   - m_radiationCountProfile: assign a RadiationCountProfile asset for realistic
+//     counts; if left empty, values come from the fallback pool controlled by
+//     m_fallbackCountPoolSize / m_fallbackMinCount / m_fallbackMaxCount.
+//
+//   Status label & permissions:
+//   - m_statusLabelDistance, m_statusLabelVerticalOffset, m_statusLabelCharacterSize,
+//     m_statusLabelFontSize: placement and size of the head-locked status text.
+//   - m_scenePermissionWaitSeconds: how long to wait for the Quest Scene/Spatial-Data
+//     permission before giving up.
+//
+//   HARDCODED (not in the Inspector — edit the named method to change):
+//   - Controller-to-action mapping (A=reshuffle, B=clear, X=re-roll, thumbstick=
+//     scale): change the InputManager checks in Update().
+//   - Placeholder barrel color/shape: edit CreatePlaceholderBarrel().
+//   - MRUK load settings (Device source, high-fidelity, on-demand load): edit
+//     ConfigureMrukForManualDeviceLoad(); the load call is in LoadRoomAsync().
+//   - Player position source (Camera.main head): edit GetPlayerPosition().
+// =============================================================================
 namespace SimJam.BarrelSimulator
 {
     /// <summary>

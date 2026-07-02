@@ -1,5 +1,43 @@
 using UnityEngine;
 
+// =============================================================================
+// TutorialStepMarker.cs
+//
+// PURPOSE:  A pulsing glowing disc on the tutorial-room floor that gates the
+//   "walk to the marker" tutorial step. While its step is the current step it
+//   shows and pulses the disc, tracks the player's headset, and reports the
+//   step complete to the TutorialManager once the player stands within range.
+//
+// HOW TO CUSTOMIZE:
+//   IMPORTANT: this component lives on a GameObject inside the TUTORIAL scene
+//   (the TutorialRoom). Every [SerializeField] below has a saved value in that
+//   scene's .unity YAML, so changing the DEFAULT here does NOT change runtime
+//   behavior. To actually change behavior, select the marker GameObject in the
+//   tutorial scene and edit the "Tutorial Step Marker" component in the Unity
+//   Inspector (or edit the corresponding value in the scene YAML).
+//
+//   - m_tutorialManager (TutorialManager reference): the controller queried for
+//     which step is active and told when this step is done. Wire it in the
+//     Inspector; if null the marker does nothing (Update early-returns).
+//   - m_stepIndex (default 3): which tutorial step this marker gates. Must match
+//     the walk-to-marker step's index in the TutorialManager. Inspector.
+//   - m_completionRadius (default 0.65 m): horizontal distance the player must
+//     get within to complete the step; also drawn as the selection gizmo.
+//     Inspector.
+//   - m_playerTarget (Transform): what counts as the player's position. Leave
+//     unset to auto-bind to Camera.main (the headset) at runtime. Inspector.
+//   - m_markerColor (default light blue RGBA): tint + emissive color of the
+//     auto-created disc and the editor gizmo. Inspector.
+//   - m_pulseSpeed (default 2.5) / m_pulseAmount (default 0.18): frequency and
+//     amplitude (fraction of base scale) of the attention pulse. Inspector.
+//   - m_markerVisual (GameObject): the disc shown on the floor. If left unset,
+//     one is auto-built at runtime. The fallback disc's SHAPE is HARDCODED (not
+//     serialized): its local position (y=0.015), scale (0.65 x 0.02 x 0.65),
+//     collider removal, and Standard-shader emissive material are all created in
+//     CreateDefaultMarkerVisual() — edit that method to change the fallback disc.
+//     To use a custom mesh instead, assign m_markerVisual in the Inspector.
+// =============================================================================
+
 namespace SimJam.Tutorial
 {
     /// <summary>

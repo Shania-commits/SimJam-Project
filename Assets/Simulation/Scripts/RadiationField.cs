@@ -2,6 +2,42 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 
+// =============================================================================
+// RadiationField.cs
+//
+// PURPOSE:  Static, scene-wide physics model of the radiation environment. Keeps
+//   the registry of all active RadiationSource emitters (the hidden hot barrel and
+//   any others) and computes the mean counts-per-second (CPS) a detector would see
+//   at a given position/aim — combining background, inverse-square falloff,
+//   shielding occlusion and a directional aim response. RadiationDetector queries
+//   GetMeanCps + SamplePoisson every frame to drive the meter readout and clicks.
+//
+// HOW TO CUSTOMIZE:
+//   NOTE: this is a plain static class (NOT a MonoBehaviour). NONE of these values
+//   are [SerializeField], so there is NOTHING for this file in the Unity Inspector
+//   or the .unity scene YAML. Every knob below is a hardcoded constant/literal —
+//   to change behavior you MUST edit this C# file (values below are the live ones,
+//   not defaults that a scene can override).
+//
+//   - BackgroundCps (const, top of class): the always-on baseline count rate so the
+//     meter is never fully silent. Edit the constant declaration here.
+//   - Point-blank multiplier "16f" (in GetMeanCps, distance < 1e-4f branch): how hot
+//     the reading pins when the sensor is basically on top of a source. Edit in the
+//     GetMeanCps method.
+//   - Directional aim response "0.25f + 0.75f * Pow(...)" (in GetMeanCps): the aim
+//     floor (0.25 when pointed away) and how sharply pointing at the source boosts
+//     the reading. Edit in the GetMeanCps method.
+//   - Distance clamp "0.25f" (dClamped in GetMeanCps): the minimum distance used in
+//     the 1/d^2 term so close readings stay finite. Edit in the GetMeanCps method.
+//   - Occlusion strength comes from each emitter's RadiationSource.ActivityCpsAt1m
+//     and each wall/door's RadiationOccluder.AttenuationFactor — those ARE serialized
+//     on their own components; tune them on the RadiationSource / RadiationOccluder
+//     GameObjects (spawned at runtime by the scene spawner), not here.
+//   - Poisson sampling crossover "30f" and the CpsToMicroSvPerHour calibration
+//     "60f / 151f" are hardcoded in SamplePoisson / CpsToMicroSvPerHour respectively;
+//     edit those methods to retune noise character or dose-rate conversion.
+// =============================================================================
+
 namespace SimJam.BarrelSimulator
 {
     /// <summary>

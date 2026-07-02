@@ -1,6 +1,49 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+// =============================================================================
+// MixamoArmRig.cs
+//
+// PURPOSE:  Runtime IK driver for the player's visible arms. It places a
+//           Mixamo-rigged arm mesh onto the OVR camera rig — chest anchored under
+//           the headset, wrists tracking the two controllers — and solves each
+//           arm analytically every LateUpdate (no Animator) so the held
+//           identiFINDER detector looks gripped by real, bending arms. Fingers
+//           curl toward a fist as the grip trigger is squeezed.
+//
+// HOW TO CUSTOMIZE:
+//   This component is created and Initialize()'d entirely from code by the
+//   arm/player spawner — it is NOT a serialized component placed on a GameObject
+//   in any .unity scene. That means the public fields below are NOT overridden by
+//   scene YAML, so editing the DEFAULTS in this C# file DOES change runtime
+//   behavior (unless the spawner sets them after AddComponent — grep the spawner
+//   that calls .Initialize(rig, armsInstance) to confirm nothing reassigns them).
+//   These are plain public fields (no [SerializeField]); tune them here:
+//     - TargetArmReach (default 0.58 m): shoulder-to-wrist reach the whole rig is
+//       auto-scaled to at init; raise/lower to fix a mis-scaled FBX or a locked elbow.
+//     - MaxReachFraction (0.99): how close to full extension before clamping, so a
+//       stretched arm still reads slightly bent instead of snapping straight.
+//     - MaxShoulderStretch (0.1 m): how far the shoulder may slide toward the
+//       controller when out of reach so a held tool stays in the hand; 0 disables.
+//     - ChestOffsetFromHead ((0,-0.16,-0.05)): where the chest sits relative to the
+//       head (down/behind); move the whole body up/down/forward here.
+//     - WristTargetLocalOffset ((0,-0.01,-0.045)): hand position relative to the
+//       controller grip.
+//     - ElbowPoleLocal ((0.3,-0.4,-0.1)): elbow bend hint (out/down/back); its x is
+//       auto-mirrored per side.
+//     - BodyYawOffsetDegrees (0): set 180 if the imported rig faces backward.
+//     - MatchHandToController (true): lock the wrist twist to the controller vs. just
+//       following the forearm.
+//     - FingerCurlAngle (70), FingerCurlSign (-1), FingerCurlAxis: fist curl amount
+//       and direction; flip FingerCurlSign to -1/+1 if fingers curl the wrong way.
+//       (FingerCurlAxis is legacy/unused by the current knuckle-line curl.)
+//   HARDCODED (not fields — edit the named method to change):
+//     - Bone names ("mixamorig:Spine2", "...Arm/ForeArm/Hand", "...HandIndex1",
+//       "...HandPinky1", "...Thumb"): in Initialize(); change if your FBX renames bones.
+//     - Post-init settle recalibration delay (0.75 s) that re-captures wrist twist once
+//       tracking warms up: the "Time.time + 0.75f" line at the end of Initialize().
+// =============================================================================
+
 namespace SimJam.BarrelSimulator
 {
     // Drives a Mixamo-rigged arms mesh (mixamorig:* bones) from the OVR rig with no Animator:

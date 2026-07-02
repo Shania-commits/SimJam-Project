@@ -1,5 +1,43 @@
 using UnityEngine;
 
+// =============================================================================
+// BarrelInstance.cs
+//
+// PURPOSE:  Per-barrel metadata component attached at runtime to every spawned
+//           drum in the lab. Holds the barrel's source label + radiation count
+//           (CPM) and, in editor/dev builds only, shows a floating billboard
+//           "cheat" label above the barrel telling you which drum is the hidden
+//           source. Values are assigned by the spawner via Initialize(); this
+//           component does not decide which barrel is radioactive.
+//
+// HOW TO CUSTOMIZE:
+//   NOTE: This component is created and configured entirely in code by the barrel
+//   spawner MonoBehaviour — it is NOT placed on a prefab/GameObject in a .unity
+//   scene. So the two [SerializeField] defaults below are almost never overridden
+//   by scene YAML; they are the effective runtime values unless the spawner sets
+//   them. The label/CPM/source values themselves come from the spawner, not here.
+//
+//   - debugLabel ([SerializeField], line ~17): the TextMesh used for the floating
+//     readout. Left null in normal use — it is auto-created lazily by
+//     EnsureDebugLabel(). Only wire it in the Inspector if this component ever
+//     lives on a prefab and you want a pre-authored label.
+//   - debugLabelLocalPosition ([SerializeField], default (0, 0.85, 0)): height/
+//     offset of the floating label above the barrel. Raise Y to float it higher.
+//     Change the default here, OR override in the Inspector if BarrelInstance is
+//     ever added to a scene/prefab GameObject.
+//   - SourceLabel / RadiationCount (public, set only via Initialize() /
+//     SetRadiationCount()): the barrel's name and CPM. HARDCODED entry point is
+//     the SPAWNER, not this file — edit the spawner MonoBehaviour that calls
+//     Initialize() to change which barrel is the source and its count values.
+//   - Debug-label visibility gate: wrapped in #if UNITY_EDITOR ||
+//     DEVELOPMENT_BUILD (SetDebugLabelVisible, line ~66). Release builds ALWAYS
+//     force the label hidden so players cannot cheat — to expose it in a real
+//     build you must edit those preprocessor branches here.
+//   - Label styling is HARDCODED in EnsureDebugLabel() (line ~111): characterSize
+//     0.06, fontSize 64, color Color.yellow, centered. Edit that method directly.
+//   - Label text format is HARDCODED in UpdateDebugLabel() (line ~133) as
+//     "{SourceLabel}\n{RadiationCount} CPM". Edit that method to reformat.
+// =============================================================================
 namespace SimJam.BarrelSimulator
 {
     /// <summary>

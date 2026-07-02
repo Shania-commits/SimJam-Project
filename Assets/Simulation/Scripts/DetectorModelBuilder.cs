@@ -1,5 +1,47 @@
 using UnityEngine;
 
+// =============================================================================
+// DetectorModelBuilder.cs
+//
+// PURPOSE:  Static factory that assembles the handheld "identiFINDER" survey
+//           meter the player uses to hunt the hidden radioactive barrel. Build()
+//           constructs the whole meter from Unity primitives (body, grip, screen,
+//           buttons, speaker holes, labels); BuildFromPrefab() wraps an authored
+//           art prefab instead. Both return a grabbable root with a box collider,
+//           rigidbody, and a "Sensor Tip" transform the radiation model samples.
+//
+// HOW TO CUSTOMIZE:
+//   NOTE: This class has NO [SerializeField] fields and lives in NO scene. Every
+//   value below is HARDCODED in this file, so editing it here DOES change runtime
+//   behavior directly (there is no Inspector/scene override to worry about). The
+//   spawners call these static methods; there is no component to edit in the
+//   Unity Inspector.
+//
+//   - Detector colors/finish: edit the Material lines at the top of Build() —
+//     `rubber`, `body`, `accent` (via MakeStandardMaterial(color, metallic,
+//     glossiness)) and the green LCD in MakeScreenMaterial() (baseColor + emission).
+//   - Detector shape / part layout: each CreatePart(...) call in Build() places one
+//     primitive by name, local position, and scale (metres). Add/remove/move parts
+//     there. The ribbed grip, screen bezel/face, buttons, and speaker-hole loop are
+//     all defined in Build().
+//   - On-screen readout default text ("0 CPS / 0.00 uSv/h ...") and the
+//     "identiFINDER" brand label: the CreateTextMesh(...) calls in Build(); the
+//     returned ScreenText is overwritten each frame by the readout binder at runtime.
+//   - Sensor sample point: the `sensorTip.transform.localPosition` in Build() (and
+//     `tip.transform.localPosition` in BuildFromPrefab) sets WHERE radiation is
+//     measured on the model.
+//   - Grab/physics feel: the Rigidbody block in Build() and BuildFromPrefab
+//     (`mass`, `collisionDetectionMode`, `interpolation`, `isKinematic`) and the
+//     BoxCollider `size`/`center`. Do NOT switch collisionDetectionMode away from
+//     ContinuousSpeculative — the grab code toggles isKinematic and other CCD modes
+//     error on kinematic bodies.
+//   - Prefab path: BuildFromPrefab(prefab, targetHeight) auto-scales the mesh to
+//     `targetHeight` (metres) and re-centres it. The prefab itself and targetHeight
+//     are chosen by the CALLER (the lab/tutorial spawner), not here. TryGetMeshBounds
+//     deliberately ignores the screen Canvas/sprite when measuring — change it there
+//     if you want the screen included in auto-scale.
+// =============================================================================
+
 namespace SimJam.BarrelSimulator
 {
     /// <summary>

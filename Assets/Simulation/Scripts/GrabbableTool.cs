@@ -3,6 +3,52 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 #endif
 
+// =============================================================================
+// GrabbableTool.cs
+//
+// PURPOSE:  Proximity-grab behaviour for hand-held tools (the identiFINDER
+//           detector and the door knob). When a controller's hand-trigger is
+//           pulled while its anchor is within the grab radius of this object's
+//           collider, the tool parents to that controller, snaps to a fixed
+//           held pose, and (on release) is thrown with the controller's
+//           velocity. Raises Grabbed / Released so detector haptics, audio, and
+//           door logic can react. Requires a Collider + Rigidbody on the same
+//           GameObject. Not a spawner: the scene spawner adds this component to
+//           the tool it builds and calls Initialize() to wire up the rig.
+//
+// HOW TO CUSTOMIZE:
+//   NOTE ON WHERE VALUES LIVE: the public fields below (HeldLocalPosition,
+//   HeldLocalEuler, FlipHeldAboutAim) are plain public fields, so Unity
+//   serializes them and stores their per-instance values in the .unity scene
+//   file (and/or in the spawner code that sets them at build time). Editing the
+//   DEFAULT literal here does NOT change runtime behaviour once a scene/spawner
+//   has its own value — find the tool GameObject the spawner creates (the
+//   identiFINDER detector / door knob) and edit the GrabbableTool component in
+//   the Unity Inspector, or edit the scene YAML / the spawner script that calls
+//   Initialize() and assigns these fields.
+//
+//   - HeldLocalPosition  (Vector3, default 0, 0.040, 0.065): where the tool
+//       sits relative to the controller anchor while held, so its grip nests in
+//       the fist. Edit on the GrabbableTool component in the Inspector.
+//   - HeldLocalEuler  (Vector3, default 55, 0, 0): held rotation in degrees;
+//       +55 pitch aims the measurement axis forward-and-up (flashlight hold).
+//       Edit on the GrabbableTool component in the Inspector.
+//   - FlipHeldAboutAim  (bool): spins the held tool 180deg about its aim axis so
+//       the screen faces the player (aim direction unchanged). Toggle on the
+//       component in the Inspector (typically enabled for the detector).
+//   - grabRadius: how close the controller anchor must be to grab. NOT a
+//       serialized field here — it is passed in at build time via the
+//       Initialize(rig, grabRadius) method (default fallback m_grabRadius =
+//       0.18f in this file). Change the value the spawner passes to Initialize(),
+//       or the m_grabRadius default here for the fallback.
+//   - k_releaseThreshold (const 0.35f): hand-trigger analog value below which a
+//       held tool is let go. Hardcoded const — edit the constant near the top of
+//       this class.
+//   - Editor-only test mount: MountToEditorCamera() attaches the tool to the
+//       main camera (G key, editor only) at a hardcoded offset (0.18, -0.12,
+//       0.35) / Euler (-35, 0, 0). Edit those literals inside MountToEditorCamera().
+// =============================================================================
+
 namespace SimJam.BarrelSimulator
 {
     /// <summary>

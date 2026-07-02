@@ -2,6 +2,43 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
+// =============================================================================
+// DetectorScreenBinder.cs
+//
+// PURPOSE:  Runtime bridge that mirrors the handheld RadiationDetector's live
+//   reading onto the identiFINDER's on-screen widgets: a TextMeshPro label
+//   (count rate in CPS + converted dose in µSv/h) and a UI Slider "warmth" bar
+//   that fills as the player closes in on the hidden radioactive barrel. This is
+//   the only file that touches TextMesh Pro / uGUI, keeping RadiationDetector
+//   itself UI-agnostic. It is added at runtime only when a detector prefab
+//   supplies a screen (see the detector spawner that calls Bind()).
+//
+// HOW TO CUSTOMIZE:
+//   This component has NO [SerializeField] fields, so nothing here is tuned via
+//   the Unity Inspector or stored in a .unity scene file — every knob is a
+//   hardcoded constant/literal in this C# file. Edit the values below directly:
+//
+//   - Refresh rate: TickInterval (const, top of class, 0.1f = 10 Hz). Controls how
+//     often the screen redraws. Edit the const declaration. Update() throttles to it.
+//
+//   - Label text/format: edit the Refresh() method. The line
+//       m_text.text = $"{cps:0} CPS\n{dose.ToString(...)} µSv/h";
+//     controls the two-line readout. Change wording, the "0" number format, or the
+//     100 µSv/h threshold that switches dose precision from "0.00" to "0" here.
+//
+//   - Dose conversion (CPS -> µSv/h): NOT in this file. It comes from
+//     RadiationField.CpsToMicroSvPerHour(cps); edit that method in RadiationField.cs.
+//
+//   - Slider "warmth" curve: edit the Mathf.Clamp01(...) block in Refresh(). The
+//     magic numbers 0.5f (floor CPS) and 20000f (CPS that fully fills the bar) set
+//     the log10 range; change them to make the bar fill sooner/later. All hardcoded.
+//
+//   - Which widgets get driven: Bind() auto-finds the FIRST TMP_Text and FIRST
+//     Slider under the identiFINDER prefab instance via GetComponentInChildren.
+//     To retarget, change the detector prefab's child hierarchy (in the prefab
+//     asset), not this script.
+// =============================================================================
+
 namespace SimJam.BarrelSimulator
 {
     // Drives the colleague's identiFINDER screen — a TextMeshPro number and a UI Slider bar — from

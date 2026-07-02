@@ -1,5 +1,39 @@
 using UnityEngine;
 
+// =============================================================================
+// TeleportEffects.cs
+//
+// PURPOSE:  Static helper that spawns a short one-shot particle burst at a
+//           teleport landing point, then self-destroys so nothing leaks. Shared
+//           by both the lab (RadiationLabRoomSpawner) and the tutorial teleporters
+//           so the arrival flourish looks identical in both rooms.
+//
+// HOW TO CUSTOMIZE:
+//   This is a static utility class with NO [SerializeField] fields and NO prefab,
+//   so it does NOT live in any .unity scene and there is NOTHING to edit in the
+//   Unity Inspector. Every value below is HARDCODED and can only be changed here
+//   in SpawnArrivalBurst() (and CreateParticleMaterial()). Recompile after editing.
+//
+//   Knobs in SpawnArrivalBurst():
+//     - main.duration (0.6f): how long the system emits.
+//     - main.startLifetime (0.5f): how long each particle lives before fading.
+//     - main.startSpeed (1.6f): how fast particles fly outward.
+//     - main.startSize (0.06f): particle size.
+//     - main.gravityModifier (-0.1f): slight upward drift (negative = rises).
+//     - main.maxParticles (64): hard cap on live particles.
+//     - emission.SetBursts(... Burst(0f, 24)): NUMBER of particles per burst (24).
+//     - shape.radius (0.22f): radius of the emission ring on the floor.
+//     - Object.Destroy(go, 1.2f): backstop cleanup delay; keep it > duration + lifetime.
+//   The burst COLOR is NOT hardcoded here: it is passed in by each caller via the
+//   `color` argument, so change the tint at the call site (e.g. in the spawner that
+//   invokes TeleportEffects.SpawnArrivalBurst), not in this file.
+//
+//   Rendering (in CreateParticleMaterial()):
+//     - Shader.Find("Sprites/Default"): kept because it is in the project's Always
+//       Included Shaders and survives on-device shader stripping. Do NOT swap in a
+//       Particles/* shader or the burst renders magenta on a stripped Quest build.
+//       The material stays white; tint comes from the per-particle start color.
+// =============================================================================
 namespace SimJam
 {
     /// <summary>

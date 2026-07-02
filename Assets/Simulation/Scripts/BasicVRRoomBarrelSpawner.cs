@@ -3,6 +3,67 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Serialization;
 
+// =============================================================================
+// BasicVRRoomBarrelSpawner.cs
+//
+// PURPOSE:
+//   The single MonoBehaviour that builds the entire "find the hidden radioactive
+//   barrel" scene at runtime: an OVR camera rig with locomotion (smooth move, snap
+//   turn, teleport), a two-room office shell with a swinging connecting door,
+//   randomized props (folding tables + wall shelves), and a walkable, visibility-
+//   checked field of 55/30/5-gallon drums that each carry a random radiation count
+//   for the identiFINDER to read. Almost every object is code-generated.
+//
+// HOW TO CUSTOMIZE:
+//   IMPORTANT: this component lives on the GameObject named "BasicVRRoomBarrelSpawner"
+//   in the scene Assets/Simulation/Scenes/BasicVRRoom.unity. Every [SerializeField]
+//   below already has a saved value in that scene's YAML, so changing a DEFAULT here
+//   in C# does NOT change runtime behavior. To actually change these, edit the
+//   BasicVRRoomBarrelSpawner component in the Unity Inspector (or the matching field
+//   in the scene .unity file). The header groups map to Inspector sections:
+//
+//   - VR rig ("VR rig"): m_createOvrCameraRig (OVR rig vs plain camera),
+//     m_playerStartPosition (spawn point; auto-clamped into the spawn room),
+//     m_defaultEyeHeight (non-OVR camera height only).
+//   - Room size ("Room scale"): m_roomSizeFeet / m_spawnRoomSizeFeet (footprints in
+//     FEET, converted via FeetToMeters), m_wallHeight, m_wallThickness,
+//     m_floorThickness, m_buildRoomGeometry (skip the shell entirely).
+//   - Door ("Connecting door"): m_doorwayWidth/Height, m_doorOpenAngle (swing),
+//     m_doorKnobInteractionRadius, m_doorToggleCooldown, m_doorSwingSpeed.
+//   - Hands ("Controller hand visuals"): m_showControllerHands, m_controllerHandScale.
+//   - Barrels ("Barrel prefabs"): m_barrelPrefabs (per-size prefab refs; null => a
+//     colored placeholder cylinder is built instead), m_radiationCountProfile
+//     (source of realistic counts), and m_barrel55/30/5ModelScale (pre-fit scale).
+//   - Scenario randomization ("Scenario randomization"): m_minBarrels/m_maxBarrels
+//     (drum count range), m_minTables/m_maxTables, m_minShelfUnits/m_maxShelfUnits,
+//     m_layoutRetryCount (attempts to hit the requested count), and
+//     m_useFixedSeed + m_fixedSeed for a reproducible layout.
+//   - Spacing / walkability ("Visibility and walkability"): m_playerClearance,
+//     m_playerRadius, m_centralAisleWidth (the cross-shaped clear aisle), and
+//     m_floorBarrelSpacing / m_tableBarrelSpacing / m_shelfBarrelSpacing.
+//   - Shelf asset ("Shelf asset"): m_wallShelfPrefab (null => primitive boards),
+//     m_shelfSurfaceClearance.
+//   - Locomotion ("Locomotion"): m_enableSmoothMove, m_enableTeleport,
+//     m_smoothMoveSpeed, m_snapTurnDegrees, m_snapTurnCooldown, m_thumbstickDeadzone.
+//   - Fallback counts ("Fallback counts"): m_fallbackCountPoolSize,
+//     m_fallbackMinCount, m_fallbackMaxCount (used only when no RadiationCountProfile
+//     is assigned).
+//
+//   HARDCODED (NOT serialized — edit the named method in this file, no Inspector):
+//   - Per-drum physical size, color, and spawn-weight (bigger drums are rarer):
+//     the BarrelSpec table in BuildBarrelSpecs().
+//   - Debug controls in Update(): A/pinch regenerates the run, B clears it, X
+//     re-rolls radiation counts.
+//   - Floor grid spacing/jitter in BuildFloorSlots(); table slot layout in
+//     BuildTableSlots(); shelf tier heights/spacing in TryCreateRandomShelf() and
+//     BuildShelfSlots().
+//   - Room/door/prop appearance: material colors and light intensity/range are
+//     literals inside BuildRoomGeometry(), BuildFluorescentPanels(),
+//     BuildHomeRoomProps(), CreateLamp(), CreatePlant(), and BuildConnectingDoor().
+//   - Table/shelf size ranges and placement retries in TryCreateRandomTable() and
+//     TryCreateRandomShelf().
+// =============================================================================
+
 namespace SimJam.BarrelSimulator
 {
     /// <summary>
