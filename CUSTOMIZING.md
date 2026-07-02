@@ -133,23 +133,20 @@ trigger** (your hand registers a press from farther out). Minimum `0.04`.
 
 ### 4. Shelf heights
 
-Shelf tier heights are **not a serialized field** — they are hardcoded layout
-math in `RadiationLabRoomSpawner.cs`, so you must edit the C# (this is one of the
-"edit the source" exceptions). In the shelf-building code the tier surface Y is:
+Shelf tier heights are now **Inspector fields** (under the **"Randomization -
+shelves"** header on `RadiationLabRoomSpawner`) — no code editing needed:
 
-```csharp
-// base 0.85 m, 0.52 m per tier
-var surfaceY = 0.85f + tier * 0.52f + UnityEngine.Random.Range(-0.02f, 0.02f);
-```
+- `m_shelfTierBaseHeight` (**Shelf Tier Base Height**, ships `0.85` m) — height of
+  the bottom board; raise/lower to move the whole shelf.
+- `m_shelfTierSpacing` (**Shelf Tier Spacing**, ships `0.52` m) — the gap between
+  tiers; **lower = shelves reach less high** (easier to reach in VR).
+- `m_minShelfTiers` / `m_maxShelfTiers` (ships `1` / `3`) — how many boards a shelf
+  stacks. Drop Max to `2` if you never want a 3-high shelf.
 
-Change the `0.85f` base to raise/lower the whole shelf and the `0.52f` to change
-the gap between tiers. There is a matching fallback constant a few lines below
-(`0.85f + tier * 0.52f + m_shelfSurfaceClearance`) used when an authored shelf
-prefab isn't measured — **keep the two in sync.** The one serialized shelf knob
-you *can* set in the Inspector is `m_shelfSurfaceClearance` (**"Shelf asset"**
-header) — a small gap so barrels don't z-fight the board — and
-`m_shelfBarrelSpacing` (**"Visibility and walkability"**) for spacing between
-barrels on a tier.
+(This used to be hardcoded in two places; both now read the same fields, so there
+is nothing to keep in sync.) Related: `m_shelfBarrelSpacing` (**"Visibility and
+walkability"**) sets spacing between barrels on a tier, and `m_shelfSurfaceClearance`
+(**"Shelf asset"**) the tiny anti-z-fight gap.
 
 ### 5. Movement: locomotion vs teleport
 
@@ -264,6 +261,85 @@ so edit the scene's `m_steps`, not `AddStarterSteps()`, to change the real
 tutorial. `m_startingStepIndex` (same component) sets which step opens first.
 
 ---
+
+## Randomization & barrel placement — full field reference
+
+**Every** value that shapes the randomized lab is now an Inspector field on the
+**`RadiationLabRoomSpawner`** component in **`RadiationLabRoom.unity`**, grouped under
+headers. Select that GameObject and scroll to the **"Randomization - …"** headers; each
+field has a hover tooltip. **Defaults match the shipped behavior**, so you only change
+what you want. (Golden rule still applies — edit them in the **Inspector**, not the C#
+defaults. See "READ THIS FIRST".)
+
+### How the room is generated (so the knobs make sense)
+1. Pick a random barrel **count** (Min/Max Barrels).
+2. Place random **tables** and **wall shelves** (counts + sizes + tiers below).
+3. Build every candidate **slot** (floor grid + table tops + shelf tiers), then **shuffle** them.
+4. **Fill** slots from the shuffled list until the count is hit; each barrel gets a random size + spin.
+5. Pick ONE barrel at random as the **hidden source** and give it a random strength + isotope.
+
+### The knobs, by Inspector header
+
+**Scenario randomization** — `Min/Max Barrels`, `Min/Max Tables`, `Min/Max Shelf Units`
+(how much spawns), `Layout Retry Count` (fit attempts), `Use Fixed Seed` + `Fixed Seed`
+(build the exact SAME room every time — great for demos/debugging).
+
+**Visibility and walkability** — `Player Clearance`, `Central Aisle Width`, and
+`Floor / Table / Shelf Barrel Spacing` (min gaps between barrels; bigger = fewer, more spread out).
+
+**Hidden radiation source** + **Randomization - seeding & isotopes** — `Min/Max Source
+Activity Cps` (source strength range; higher = easier to find), `Isotope Names` (editable
+list of labels the source is randomly given), `Seed Attempt Multiplier` (advanced).
+
+**Randomization - floor placement**
+
+| Field | Default | Effect |
+|---|---|---|
+| Floor Slot Spacing | 0.56 | Grid density for floor barrels (smaller = denser). |
+| Floor Edge Margin | 0.52 | Keep-back from the walls. |
+| Floor Slot Jitter | 0.08 | Random wobble so the grid isn't rigid. |
+| Floor Obstacle Clearance | 0.38 | Rejects floor slots overlapping props. |
+
+**Randomization - tables**
+
+| Field | Default | Effect |
+|---|---|---|
+| Table Width / Depth Range | (1.25,1.65) / (0.62,0.8) | Random table size. |
+| Table Height | 0.74 | Table-top height. |
+| Table Placement Attempts | 60 | Fit tries before giving up. |
+| Table Footprint Padding / Overlap Clearance | 0.12 / 0.18 | Spacing reserved around tables. |
+| Table Rotate Chance | 0.5 | Odds of a 0° vs 90° table. |
+| Table Side / End Slot Factor | 0.28 / 0.24 | Where barrels sit on the table top. |
+| Table Centre Sideways Threshold | 0.45 | Odds the centre barrel lies on its side. |
+
+**Randomization - shelves**
+
+| Field | Default | Effect |
+|---|---|---|
+| Min / Max Shelf Tiers | 1 / 3 | Boards per shelf (fewer = shorter shelves). |
+| Shelf Tier Base Height | 0.85 | Height of the bottom board. |
+| Shelf Tier Spacing | 0.52 | Gap between boards (lower = reaches less high). |
+| Shelf Tier Jitter | 0.02 | Random height wobble. |
+| Shelf Length / Depth Range | (1.05,2.05) / (0.34,0.46) | Random board size. |
+| Shelf Side Offset Range | 1.65 | How far along a wall a shelf can sit. |
+| Shelf Wall Inset | 0.005 | Gap from the wall face. |
+| Shelf Placement Attempts | 30 | Fit tries. |
+| Shelf Footprint Padding / Overlap Clearance | 0.12 / 0.15 | Spacing reserved around shelves. |
+| Shelf Board End Inset | 0.17 | Keeps end barrels on the board. |
+
+**Randomization - barrel mix & variety** — `Barrel 55 / 30 / 5 Weight` (0.14 / 0.26 /
+0.60; relative odds of each size — 5-gal is most common by default) and `Barrel Spin
+Range` (0–360; random yaw so the same face never repeats).
+
+**Barrel dimensions (advanced)** — each size's Diameter / Height / Label Height / Body
+Color. These are the physical barrel specs; change only if you want physically different drums.
+
+### Quick recipes
+- **Denser room:** raise Max Barrels, lower Floor Slot Spacing + Floor Barrel Spacing.
+- **Only small barrels:** set Barrel 30 Weight + Barrel 55 Weight to `0`.
+- **Shorter shelves:** set Max Shelf Tiers to `2` (or lower Shelf Tier Spacing).
+- **Easier target:** raise Min Source Activity Cps.
+- **The exact same room every run (demo/debug):** tick **Use Fixed Seed**.
 
 ## Per-file quick reference
 

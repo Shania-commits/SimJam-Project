@@ -176,15 +176,19 @@ namespace SimJam.Tutorial
         // Kept far apart (opposite sides of the room) so the hot barrel's inverse-square field does
         // not bathe the inert one -- the player must walk up to each to see the contrast.
         /// <summary>Floor position of the radioactive teaching barrel the player must submit.</summary>
-        [SerializeField] private Vector3 m_hotBarrelPosition = new Vector3(2.8f, 0f, 0.3f);     // "SUBMIT THIS"
+        [SerializeField, Tooltip("Floor position of the radioactive teaching barrel (the one to SUBMIT).")] private Vector3 m_hotBarrelPosition = new Vector3(2.8f, 0f, 0.3f);     // "SUBMIT THIS"
         /// <summary>Floor position of the inert decoy barrel the player must not submit.</summary>
-        [SerializeField] private Vector3 m_inertBarrelPosition = new Vector3(-2.8f, 0f, 0.3f);  // "DON'T SUBMIT"
+        [SerializeField, Tooltip("Floor position of the inert decoy barrel (the one to NOT submit).")] private Vector3 m_inertBarrelPosition = new Vector3(-2.8f, 0f, 0.3f);  // "DON'T SUBMIT"
         /// <summary>Emitted activity (CPS) of the hot teaching barrel's radiation source.</summary>
-        [SerializeField, Min(100f)] private float m_hotBarrelActivityCps = 6000f;
+        [SerializeField, Min(100f), Tooltip("How strongly the hot teaching barrel reads (counts/sec).")] private float m_hotBarrelActivityCps = 6000f;
+        /// <summary>Isotope label shown for the hot teaching barrel (cosmetic).</summary>
+        [SerializeField, Tooltip("Isotope label for the hot teaching barrel (cosmetic).")] private string m_hotBarrelIsotope = "Cs-137";
         /// <summary>Index of the "submit the radioactive barrel" teaching step this controller completes.</summary>
         [SerializeField, Min(0)] private int m_teachingSubmitStepIndex = 6;
         /// <summary>Half-angle (degrees) of the forgiving aim cone used to test which teaching barrel is submitted.</summary>
-        [SerializeField, Range(4f, 35f)] private float m_teachingGuessConeAngle = 34f; // very forgiving "general area" aim
+        [SerializeField, Range(4f, 35f), Tooltip("Half-angle (deg) of the forgiving submit aim cone. Bigger = easier to submit.")] private float m_teachingGuessConeAngle = 34f; // very forgiving "general area" aim
+        /// <summary>How far (m) the teaching submit aim reaches to find a barrel.</summary>
+        [SerializeField, Min(0.5f), Tooltip("How far (m) the teaching submit aim reaches to a barrel.")] private float m_teachingAimRange = 12f;
         [Header("Feedback audio")]
         /// <summary>Chime played when the player correctly submits the hot barrel.</summary>
         [SerializeField] private AudioClip m_correctSubmitClip;
@@ -770,7 +774,7 @@ namespace SimJam.Tutorial
 
             // Named "Drum" (not "Barrel") so the dresser's legacy-barrel hide pass never disables them.
             m_hotBarrel = CreateTeachingBarrel("Tutorial Hot Drum (SUBMIT)", m_hotBarrelPosition);
-            m_hotBarrel.AddComponent<RadiationSource>().Configure(m_hotBarrelActivityCps, "Cs-137");
+            m_hotBarrel.AddComponent<RadiationSource>().Configure(m_hotBarrelActivityCps, m_hotBarrelIsotope);
             m_hotLabel = CreateBarrelLabel(m_hotBarrel, "SUBMIT THIS", new Color(0.30f, 1f, 0.45f));
 
             m_inertBarrel = CreateTeachingBarrel("Tutorial Inert Drum", m_inertBarrelPosition);
@@ -1009,7 +1013,7 @@ namespace SimJam.Tutorial
 
             var origin = m_detectorSensorTip.position;
             var direction = m_detectorRootTf.up;
-            const float maxDistance = 12f; // match the lab's guess ray length so distance scanning works too
+            var maxDistance = m_teachingAimRange; // match the lab's guess ray length so distance scanning works too
 
             GameObject best = null;
             var bestAngle = Mathf.Max(2f, m_teachingGuessConeAngle);

@@ -33,11 +33,10 @@ using UnityEngine.Serialization;
 //       m_minShelfUnits/m_maxShelfUnits set how much furniture appears;
 //       m_guessConeAngle / m_guessRayLength set how forgiving the "point at a
 //       barrel" aim is.
-//   - Hidden source (Inspector, "Hidden radiation source" header):
-//       m_minSourceActivityCps / m_maxSourceActivityCps set the log-uniform
-//       activity range. The isotope label is picked from the HARDCODED array
-//       s_isotopeNames (top of this file) inside AssignHotSource(); edit that array
-//       here in C# to change the isotope names.
+//   - Hidden source (Inspector, "Hidden radiation source" + "Randomization -
+//       seeding & isotopes"): m_minSourceActivityCps / m_maxSourceActivityCps set
+//       the log-uniform activity range; m_isotopeNames is the (editable) list of
+//       isotope labels the hidden source is randomly given each round.
 //   - Room scale (Inspector, "Room scale" header): m_roomSizeFeet /
 //       m_spawnRoomSizeFeet (feet), m_wallHeight, m_wallThickness, m_floorThickness.
 //       Set m_buildRoomGeometry false to keep an authored scene instead of building
@@ -54,9 +53,10 @@ using UnityEngine.Serialization;
 //   - Barrels' look (Inspector, "Barrel prefabs" header): assign the 3 prefabs in
 //       m_barrelPrefabs and the PBR materials (m_barrelLargeMetal/Paint,
 //       m_barrelSmallMetal/Paint); leave materials null to keep procedural tints.
-//       The per-size physical dimensions, tint colors and selection weights live in
-//       the HARDCODED BuildBarrelSpec/spec table in this file (search "BarrelSpec"),
-//       not in the Inspector.
+//       The size MIX (m_barrel55/30/5Weight), random spin (m_barrelSpinRange) and
+//       each size's dimensions/tint (m_barrel55/30/5 Diameter/Height/LabelHeight/
+//       BodyColor) are now Inspector fields under "Randomization - barrel mix &
+//       variety" and "Barrel dimensions (advanced)".
 //   - Movement (Inspector, "Locomotion" header): m_enableSmoothMove /
 //       m_enableTeleport, m_smoothMoveSpeed, m_snapTurnDegrees, m_maxTeleportDistance.
 //       NOTE: at runtime ApplyMovementPreference() OVERRIDES these two toggles with
@@ -67,6 +67,11 @@ using UnityEngine.Serialization;
 //       m_customArmsPrefab to replace the default Meta hands, then tune
 //       m_customArmsChestOffset / m_customArmsBodyYawOffset / m_customArmsTargetReach
 //       on-device.
+//   - Fine placement (Inspector, "Randomization - floor / tables / shelves"): every
+//       previously-hardcoded placement value is now a tooltipped field - floor grid
+//       density + jitter, table/shelf size ranges, shelf tier count/height/spacing,
+//       footprint paddings and retry counts. Defaults match the original behavior.
+//       See CUSTOMIZING.md > "Randomization & barrel placement".
 //   - Determinism: enable m_useFixedSeed + set m_fixedSeed (Inspector, "Scenario
 //       randomization") to reproduce the exact same layout every round.
 // =============================================================================
@@ -91,9 +96,6 @@ namespace SimJam.BarrelSimulator
         private const float FeetToMeters = 0.3048f;
         /// <summary>Default square room edge length in feet used when no size is authored.</summary>
         private const float DefaultRoomFeet = 20f;
-
-        /// <summary>Isotope labels randomly assigned to the hidden source (purely cosmetic flavour).</summary>
-        private static readonly string[] s_isotopeNames = { "Cs-137", "Co-60", "Ir-192", "Am-241" };
 
         /// <summary>The three physical drum sizes the spawner can place (55/30/5 US gallon).</summary>
         private enum BarrelSize
@@ -335,9 +337,9 @@ namespace SimJam.BarrelSimulator
 
         [Header("Hidden radiation source")]
         /// <summary>Minimum activity (counts per second) the hidden source can be assigned.</summary>
-        [SerializeField, Min(1f)] private float m_minSourceActivityCps = 1500f;
+        [SerializeField, Min(1f), Tooltip("Weakest the hidden source can be (counts/sec). A random log-uniform value between min and max is chosen each round; higher = easier to find.")] private float m_minSourceActivityCps = 1500f;
         /// <summary>Maximum activity (counts per second) the hidden source can be assigned.</summary>
-        [SerializeField, Min(1f)] private float m_maxSourceActivityCps = 30000f;
+        [SerializeField, Min(1f), Tooltip("Strongest the hidden source can be (counts/sec).")] private float m_maxSourceActivityCps = 30000f;
 
         [Header("Detector")]
         /// <summary>Proximity radius within which a controller can grab the detector off its pedestal.</summary>
@@ -371,14 +373,14 @@ namespace SimJam.BarrelSimulator
         /// <summary>Duration of the fade-from-black on scene entry.</summary>
         [SerializeField, Min(0f)] private float m_transitionFadeSeconds = 0.6f;
         /// <summary>Effective poke radius for the wall START button (larger = easier to trigger).</summary>
-        [SerializeField, Min(0.04f)] private float m_startButtonPressRadius = 0.15f; // larger = easier to poke
+        [SerializeField, Min(0.04f), Tooltip("How close (m) a hand must get to the wall START button to trigger it. Larger = easier to poke.")] private float m_startButtonPressRadius = 0.15f; // larger = easier to poke
         /// <summary>Maximum distance a guess aim ray reaches to find a barrel.</summary>
-        [SerializeField, Min(0.5f)] private float m_guessRayLength = 12f;
+        [SerializeField, Min(0.5f), Tooltip("How far (m) the submit aim reaches to find a barrel.")] private float m_guessRayLength = 12f;
         // Half-angle of the forgiving "aim cone" for submitting a guess: the player only needs to
         // point roughly at a drum, not pixel-perfectly. The closest-to-centre barrel within this
         // cone is the pick.
         /// <summary>Half-angle of the forgiving aim cone for submitting a guess (degrees).</summary>
-        [SerializeField, Range(4f, 35f)] private float m_guessConeAngle = 34f; // very forgiving "general area" aim
+        [SerializeField, Range(4f, 35f), Tooltip("Half-angle (deg) of the forgiving submit aim cone. Bigger = easier to submit (you only need to point roughly at a barrel).")] private float m_guessConeAngle = 34f; // very forgiving "general area" aim
 
         [Header("Feedback audio")]
         /// <summary>Chime played on a correct guess.</summary>
@@ -388,37 +390,37 @@ namespace SimJam.BarrelSimulator
 
         [Header("Scenario randomization")]
         /// <summary>Minimum number of barrels requested per round.</summary>
-        [SerializeField, Min(1)] private int m_minBarrels = 11;
+        [SerializeField, Min(1), Tooltip("Fewest barrels a round can spawn (a random count between min and max is chosen).")] private int m_minBarrels = 11;
         /// <summary>Maximum number of barrels requested per round.</summary>
-        [SerializeField, Min(1)] private int m_maxBarrels = 45;
+        [SerializeField, Min(1), Tooltip("Most barrels a round can spawn.")] private int m_maxBarrels = 45;
         /// <summary>Minimum number of folding tables placed per round.</summary>
-        [SerializeField, Min(0)] private int m_minTables;
+        [SerializeField, Min(0), Tooltip("Fewest folding tables placed per round.")] private int m_minTables;
         /// <summary>Maximum number of folding tables placed per round.</summary>
-        [SerializeField, Min(0)] private int m_maxTables = 4;
+        [SerializeField, Min(0), Tooltip("Most folding tables placed per round.")] private int m_maxTables = 4;
         /// <summary>Minimum number of wall shelf units placed per round.</summary>
-        [SerializeField, Min(0)] private int m_minShelfUnits = 2;
+        [SerializeField, Min(0), Tooltip("Fewest wall shelf units placed per round.")] private int m_minShelfUnits = 2;
         /// <summary>Maximum number of wall shelf units placed per round.</summary>
-        [SerializeField, Min(0)] private int m_maxShelfUnits = 9;
+        [SerializeField, Min(0), Tooltip("Most wall shelf units placed per round.")] private int m_maxShelfUnits = 9;
         /// <summary>How many differently-seeded layout attempts to try to fit all requested barrels.</summary>
-        [SerializeField, Min(1)] private int m_layoutRetryCount = 10;
+        [SerializeField, Min(1), Tooltip("How many differently-seeded layouts to try to fit all the barrels; the best-fitting one is kept.")] private int m_layoutRetryCount = 10;
         /// <summary>When true, use m_fixedSeed for deterministic layouts instead of a time-based seed.</summary>
-        [SerializeField] private bool m_useFixedSeed;
+        [SerializeField, Tooltip("Turn ON to always build the SAME room (uses Fixed Seed) - handy for demos/debugging.")] private bool m_useFixedSeed;
         /// <summary>Deterministic RNG seed used when m_useFixedSeed is enabled.</summary>
-        [SerializeField] private int m_fixedSeed = 12345;
+        [SerializeField, Tooltip("The seed used when Use Fixed Seed is on. Same number = same room every time.")] private int m_fixedSeed = 12345;
 
         [Header("Visibility and walkability")]
         /// <summary>Radius around the player start kept clear of barrels/props.</summary>
-        [SerializeField, Min(0.1f)] private float m_playerClearance = 0.8f;
+        [SerializeField, Min(0.1f), Tooltip("Radius (m) around the player's start kept clear of barrels/props.")] private float m_playerClearance = 0.8f;
         /// <summary>Approximate player body radius used for doorway-crossing width checks.</summary>
-        [SerializeField, Min(0.05f)] private float m_playerRadius = 0.28f;
+        [SerializeField, Min(0.05f), Tooltip("Player body radius (m) used for doorway/navigation width checks.")] private float m_playerRadius = 0.28f;
         /// <summary>Width of the always-clear cross-shaped central aisle through the lab.</summary>
-        [SerializeField, Min(0.2f)] private float m_centralAisleWidth = 0.95f;
+        [SerializeField, Min(0.2f), Tooltip("Width (m) of the always-clear cross-shaped aisle through the room.")] private float m_centralAisleWidth = 0.95f;
         /// <summary>Minimum centre-to-centre spacing between floor barrels.</summary>
-        [SerializeField, Min(0.05f)] private float m_floorBarrelSpacing = 0.64f;
+        [SerializeField, Min(0.05f), Tooltip("Minimum centre-to-centre spacing (m) between floor barrels. Larger = fewer, more spread out.")] private float m_floorBarrelSpacing = 0.64f;
         /// <summary>Minimum spacing between barrels sharing a table top.</summary>
-        [SerializeField, Min(0.01f)] private float m_tableBarrelSpacing = 0.34f;
+        [SerializeField, Min(0.01f), Tooltip("Minimum spacing (m) between barrels on a table top.")] private float m_tableBarrelSpacing = 0.34f;
         /// <summary>Minimum spacing between barrels sharing a shelf tier.</summary>
-        [SerializeField, Min(0.01f)] private float m_shelfBarrelSpacing = 0.28f;
+        [SerializeField, Min(0.01f), Tooltip("Minimum spacing (m) between barrels on a shelf tier.")] private float m_shelfBarrelSpacing = 0.28f;
         // Tight per-barrel walk/teleport keep-out so the player can step right up to a barrel to
         // scan it (net keep-out ~= barrel radius + this) without standing inside the cylinder.
         /// <summary>Extra padding beyond a floor barrel's radius that the player is kept out of.</summary>
@@ -429,6 +431,112 @@ namespace SimJam.BarrelSimulator
         [SerializeField] private GameObject m_wallShelfPrefab;
         /// <summary>Small gap added above a shelf surface so placed barrels don't z-fight the board.</summary>
         [SerializeField, Min(0.001f)] private float m_shelfSurfaceClearance = 0.015f;
+
+        // ---- Advanced randomization / placement knobs. Every default below MATCHES the value that
+        // used to be hardcoded inside the generation methods, so leaving them alone reproduces the
+        // exact previous behavior. Tune them on the RadiationLabRoomSpawner component in the
+        // RadiationLabRoom scene (see CUSTOMIZING.md > "Randomization & barrel placement"). ----
+        [Header("Randomization - floor placement")]
+        [Tooltip("Grid spacing (m) between candidate floor barrel slots before jitter. Smaller = denser floor barrels.")]
+        [SerializeField, Min(0.2f)] private float m_floorSlotSpacing = 0.56f;
+        [Tooltip("Inset (m) from each wall where the floor grid starts, so barrels don't hug the walls.")]
+        [SerializeField, Min(0f)] private float m_floorEdgeMargin = 0.52f;
+        [Tooltip("Random +/- XZ jitter (m) added to each floor grid point so the grid never looks rigid.")]
+        [SerializeField, Min(0f)] private float m_floorSlotJitter = 0.08f;
+        [Tooltip("Clearance radius (m) used to reject a floor slot overlapping a wall/table/shelf obstacle.")]
+        [SerializeField, Min(0f)] private float m_floorObstacleClearance = 0.38f;
+
+        [Header("Randomization - tables")]
+        [Tooltip("Random table length (m), X axis: (min, max).")]
+        [SerializeField] private Vector2 m_tableWidthRange = new Vector2(1.25f, 1.65f);
+        [Tooltip("Random table depth (m), Z axis: (min, max).")]
+        [SerializeField] private Vector2 m_tableDepthRange = new Vector2(0.62f, 0.8f);
+        [Tooltip("Folding-table top height (m).")]
+        [SerializeField, Min(0.1f)] private float m_tableHeight = 0.74f;
+        [Tooltip("How many positions to try when fitting a table without overlaps.")]
+        [SerializeField, Min(1)] private int m_tablePlacementAttempts = 60;
+        [Tooltip("Padding (m) added around a table footprint when reserving floor space.")]
+        [SerializeField, Min(0f)] private float m_tableFootprintPadding = 0.12f;
+        [Tooltip("Overlap tolerance (m) when testing a table against existing props.")]
+        [SerializeField, Min(0f)] private float m_tableOverlapClearance = 0.18f;
+        [Tooltip("A 0..1 roll ABOVE this yaws the table 0 degrees, otherwise 90 (0.5 = even).")]
+        [SerializeField, Range(0f, 1f)] private float m_tableRotateChance = 0.5f;
+        [Tooltip("Side barrel-slot offset as a fraction of table width (X).")]
+        [SerializeField, Range(0f, 0.5f)] private float m_tableSideSlotFactor = 0.28f;
+        [Tooltip("Front/back barrel-slot offset as a fraction of table depth (Z).")]
+        [SerializeField, Range(0f, 0.5f)] private float m_tableEndSlotFactor = 0.24f;
+        [Tooltip("Centre table slot allows a barrel on its side when a 0..1 roll exceeds this (lower = more often).")]
+        [SerializeField, Range(0f, 1f)] private float m_tableCentreSidewaysThreshold = 0.45f;
+
+        [Header("Randomization - shelves")]
+        [Tooltip("Minimum number of stacked tiers (boards) a shelf unit can have.")]
+        [SerializeField, Min(1)] private int m_minShelfTiers = 1;
+        [Tooltip("Maximum number of stacked tiers (boards) a shelf unit can have.")]
+        [SerializeField, Min(1)] private int m_maxShelfTiers = 3;
+        [Tooltip("Height (m) of the bottom shelf tier's surface.")]
+        [SerializeField, Min(0f)] private float m_shelfTierBaseHeight = 0.85f;
+        [Tooltip("Vertical spacing (m) between shelf tiers. Lower = shelves reach less high.")]
+        [SerializeField, Min(0.2f)] private float m_shelfTierSpacing = 0.52f;
+        [Tooltip("Random +/- jitter (m) on each tier's height.")]
+        [SerializeField, Min(0f)] private float m_shelfTierJitter = 0.02f;
+        [Tooltip("Random shelf board length (m): (min, max).")]
+        [SerializeField] private Vector2 m_shelfLengthRange = new Vector2(1.05f, 2.05f);
+        [Tooltip("Random shelf board depth (m), front-to-back: (min, max).")]
+        [SerializeField] private Vector2 m_shelfDepthRange = new Vector2(0.34f, 0.46f);
+        [Tooltip("How far along a wall (m) a shelf can sit from centre: +/- this value.")]
+        [SerializeField, Min(0f)] private float m_shelfSideOffsetRange = 1.65f;
+        [Tooltip("Air gap (m) between the wall face and the shelf back (5 mm reads as flush).")]
+        [SerializeField, Min(0f)] private float m_shelfWallInset = 0.005f;
+        [Tooltip("How many positions to try when fitting a shelf without overlaps.")]
+        [SerializeField, Min(1)] private int m_shelfPlacementAttempts = 30;
+        [Tooltip("Padding (m) around a shelf's floor keep-out footprint.")]
+        [SerializeField, Min(0f)] private float m_shelfFootprintPadding = 0.12f;
+        [Tooltip("Overlap tolerance (m) when testing a shelf against existing shelves.")]
+        [SerializeField, Min(0f)] private float m_shelfOverlapClearance = 0.15f;
+        [Tooltip("Inset (m) keeping end barrels from overhanging the shelf board ends.")]
+        [SerializeField, Min(0f)] private float m_shelfBoardEndInset = 0.17f;
+
+        [Header("Randomization - barrel mix & variety")]
+        [Tooltip("Relative chance a slot picks the 55-gallon size (weighted vs the 30/5 gal weights).")]
+        [SerializeField, Min(0f)] private float m_barrel55Weight = 0.14f;
+        [Tooltip("Relative chance a slot picks the 30-gallon size.")]
+        [SerializeField, Min(0f)] private float m_barrel30Weight = 0.26f;
+        [Tooltip("Relative chance a slot picks the 5-gallon size (defaults make small barrels most common).")]
+        [SerializeField, Min(0f)] private float m_barrel5Weight = 0.6f;
+        [Tooltip("Each barrel is spun a random yaw within this range (deg) so the same model face never repeats.")]
+        [SerializeField] private Vector2 m_barrelSpinRange = new Vector2(0f, 360f);
+
+        [Header("Randomization - seeding & isotopes")]
+        [Tooltip("Prime multiplier spacing out per-attempt seeds (baseSeed + attempt * this).")]
+        [SerializeField] private int m_seedAttemptMultiplier = 7919;
+        [Tooltip("Isotope labels randomly assigned to the hidden source (cosmetic). Add/edit freely.")]
+        [SerializeField] private string[] m_isotopeNames = { "Cs-137", "Co-60", "Ir-192", "Am-241" };
+
+        [Header("Barrel dimensions (advanced - real barrel sizes)")]
+        [Tooltip("55-gallon barrel diameter (m).")]
+        [SerializeField, Min(0.05f)] private float m_barrel55Diameter = 0.58f;
+        [Tooltip("55-gallon barrel height (m).")]
+        [SerializeField, Min(0.05f)] private float m_barrel55Height = 0.9f;
+        [Tooltip("Height (m) up the 55-gallon barrel where the size sticker wraps.")]
+        [SerializeField, Min(0f)] private float m_barrel55LabelHeight = 0.46f;
+        [Tooltip("Procedural tint for the 55-gallon barrel (used when no authored material is set).")]
+        [SerializeField] private Color m_barrel55BodyColor = new Color(0.17f, 0.28f, 0.42f);
+        [Tooltip("30-gallon barrel diameter (m).")]
+        [SerializeField, Min(0.05f)] private float m_barrel30Diameter = 0.48f;
+        [Tooltip("30-gallon barrel height (m).")]
+        [SerializeField, Min(0.05f)] private float m_barrel30Height = 0.72f;
+        [Tooltip("Height (m) up the 30-gallon barrel where the size sticker wraps.")]
+        [SerializeField, Min(0f)] private float m_barrel30LabelHeight = 0.36f;
+        [Tooltip("Procedural tint for the 30-gallon barrel.")]
+        [SerializeField] private Color m_barrel30BodyColor = new Color(0.32f, 0.35f, 0.38f);
+        [Tooltip("5-gallon barrel diameter (m).")]
+        [SerializeField, Min(0.05f)] private float m_barrel5Diameter = 0.24f;
+        [Tooltip("5-gallon barrel height (m).")]
+        [SerializeField, Min(0.05f)] private float m_barrel5Height = 0.31f;
+        [Tooltip("Height (m) up the 5-gallon barrel where the size sticker wraps.")]
+        [SerializeField, Min(0f)] private float m_barrel5LabelHeight = 0.17f;
+        [Tooltip("Procedural tint for the 5-gallon barrel.")]
+        [SerializeField] private Color m_barrel5BodyColor = new Color(0.93f, 0.83f, 0.22f);
 
         [Header("Locomotion")]
         /// <summary>When true, thumbstick smooth locomotion is enabled (overridden by start-screen choice).</summary>
@@ -1172,7 +1280,7 @@ namespace SimJam.BarrelSimulator
 
             for (var attempt = 0; attempt < attemptCount; attempt++)
             {
-                var attemptSeed = unchecked(baseSeed + attempt * 7919);
+                var attemptSeed = unchecked(baseSeed + attempt * m_seedAttemptMultiplier);
                 UnityEngine.Random.InitState(attemptSeed);
                 ClearScenario();
                 BuildRandomizedScenarioProps();
@@ -1284,7 +1392,9 @@ namespace SimJam.BarrelSimulator
             var safeMin = Mathf.Max(1f, Mathf.Min(m_minSourceActivityCps, m_maxSourceActivityCps));
             var safeMax = Mathf.Max(safeMin, Mathf.Max(m_minSourceActivityCps, m_maxSourceActivityCps));
             var activity = Mathf.Pow(10f, UnityEngine.Random.Range(Mathf.Log10(safeMin), Mathf.Log10(safeMax)));
-            var isotope = s_isotopeNames[UnityEngine.Random.Range(0, s_isotopeNames.Length)];
+            var isotope = m_isotopeNames != null && m_isotopeNames.Length > 0
+                ? m_isotopeNames[UnityEngine.Random.Range(0, m_isotopeNames.Length)]
+                : "Cs-137";
 
             m_hotSource = barrel.gameObject.AddComponent<RadiationSource>();
             m_hotSource.Configure(activity, isotope);
@@ -2380,21 +2490,21 @@ namespace SimJam.BarrelSimulator
         {
             var tableMaterial = CreateMaterial(new Color(0.94f, 0.94f, 0.91f), "Plastic Folding Table", 0f, 0.45f, null, null);
             var legMaterial = CreateMaterial(new Color(0.55f, 0.56f, 0.58f), "Table Metal Legs", 0.7f, 0.55f, null, null);
-            var tableSize = new Vector2(UnityEngine.Random.Range(1.25f, 1.65f), UnityEngine.Random.Range(0.62f, 0.8f));
-            const float tableHeight = 0.74f;
+            var tableSize = new Vector2(UnityEngine.Random.Range(m_tableWidthRange.x, m_tableWidthRange.y), UnityEngine.Random.Range(m_tableDepthRange.x, m_tableDepthRange.y));
+            var tableHeight = m_tableHeight;
 
-            for (var attempt = 0; attempt < 60; attempt++)
+            for (var attempt = 0; attempt < m_tablePlacementAttempts; attempt++)
             {
-                var yaw = UnityEngine.Random.value > 0.5f ? 0f : 90f;
+                var yaw = UnityEngine.Random.value > m_tableRotateChance ? 0f : 90f;
                 var position = GetRandomQuadrantPosition(0.7f);
                 var footprint = new ObstacleRect
                 {
                     Center = new Vector2(position.x, position.z),
-                    HalfExtents = tableSize * 0.5f + Vector2.one * 0.12f,
+                    HalfExtents = tableSize * 0.5f + Vector2.one * m_tableFootprintPadding,
                     YawDegrees = yaw
                 };
 
-                if (!IsFootprintAllowed(footprint, 0.18f))
+                if (!IsFootprintAllowed(footprint, m_tableOverlapClearance))
                 {
                     continue;
                 }
@@ -2442,7 +2552,7 @@ namespace SimJam.BarrelSimulator
             // The shelf back face is pinned to the root's local z=0 plane (both the procedural
             // board and the asset path), so this inset is the exact air gap to the wall inner
             // face. 5 mm reads as flush/wall-mounted without z-fighting.
-            const float wallMountInset = 0.005f;
+            var wallMountInset = m_shelfWallInset;
             var wallOptions = new[] { WallSide.North, WallSide.East, WallSide.West };
 
             var wall = WallSide.North;
@@ -2457,15 +2567,15 @@ namespace SimJam.BarrelSimulator
 
             // Try several wall positions; reject any that overlaps an already-placed shelf. If no
             // clear spot is found, place NONE (one shelf or none -- never overlapping boards).
-            for (var attempt = 0; attempt < 30; attempt++)
+            for (var attempt = 0; attempt < m_shelfPlacementAttempts; attempt++)
             {
                 wall = wallOptions[UnityEngine.Random.Range(0, wallOptions.Length)];
-                length = UnityEngine.Random.Range(1.05f, 2.05f);
+                length = UnityEngine.Random.Range(m_shelfLengthRange.x, m_shelfLengthRange.y);
                 // Deep enough that a 5 gal barrel (0.28 dia) sits centered on the board with side
                 // clearance instead of overhanging the front edge.
-                depth = UnityEngine.Random.Range(0.34f, 0.46f);
-                tiers = UnityEngine.Random.Range(1, 4);
-                var sideOffset = UnityEngine.Random.Range(-1.65f, 1.65f);
+                depth = UnityEngine.Random.Range(m_shelfDepthRange.x, m_shelfDepthRange.y);
+                tiers = UnityEngine.Random.Range(m_minShelfTiers, m_maxShelfTiers + 1);
+                var sideOffset = UnityEngine.Random.Range(-m_shelfSideOffsetRange, m_shelfSideOffsetRange);
 
                 switch (wall)
                 {
@@ -2521,7 +2631,7 @@ namespace SimJam.BarrelSimulator
                 // Lowered so the top tier is easier to reach in VR: base 0.85 m (was 1.05 m), 0.52 m
                 // tier spacing (was 0.58 m) still leaves ~0.10 m of clear air above a 0.36 m-tall 5 gal
                 // barrel before the shelf above it. Top of a 3-tier shelf drops ~2.21 m -> ~1.89 m.
-                var surfaceY = 0.85f + tier * 0.52f + UnityEngine.Random.Range(-0.02f, 0.02f);
+                var surfaceY = m_shelfTierBaseHeight + tier * m_shelfTierSpacing + UnityEngine.Random.Range(-m_shelfTierJitter, m_shelfTierJitter);
                 if (TryCreateShelfAssetTier(shelfRoot.transform, tier, surfaceY, length, depth, out var shelfBounds))
                 {
                     shelfSlotSize = new Vector2(
@@ -2552,7 +2662,7 @@ namespace SimJam.BarrelSimulator
                     HalfExtents = new Vector2(length * 0.5f, depth * 0.5f),
                     YawDegrees = rotation.eulerAngles.y
                 },
-                SurfaceY = surfaceHeights.Count > 0 ? surfaceHeights[0] : 0.85f,
+                SurfaceY = surfaceHeights.Count > 0 ? surfaceHeights[0] : m_shelfTierBaseHeight,
                 Forward = inward,
                 Size = shelfSlotSize,
                 TierCount = surfaceHeights.Count,
@@ -2573,7 +2683,7 @@ namespace SimJam.BarrelSimulator
             m_navigationObstacles.Add(new ObstacleRect
             {
                 Center = shelfObstacleCenter,
-                HalfExtents = new Vector2(length * 0.5f + 0.12f, depth * 0.5f + 0.12f),
+                HalfExtents = new Vector2(length * 0.5f + m_shelfFootprintPadding, depth * 0.5f + m_shelfFootprintPadding),
                 YawDegrees = rotation.eulerAngles.y
             });
         }
@@ -2583,7 +2693,7 @@ namespace SimJam.BarrelSimulator
         {
             foreach (var shelf in m_shelves)
             {
-                if (FootprintsOverlap(candidate, shelf.Footprint, 0.15f))
+                if (FootprintsOverlap(candidate, shelf.Footprint, m_shelfOverlapClearance))
                 {
                     return true;
                 }
@@ -2788,19 +2898,20 @@ namespace SimJam.BarrelSimulator
             var size = RoomSizeMeters;
             var halfWidth = size.x * 0.5f;
             var halfDepth = size.y * 0.5f;
-            const float step = 0.56f;
+            var step = m_floorSlotSpacing;
+            var margin = m_floorEdgeMargin;
 
-            for (var x = -halfWidth + 0.52f; x <= halfWidth - 0.52f; x += step)
+            for (var x = -halfWidth + margin; x <= halfWidth - margin; x += step)
             {
-                for (var z = -halfDepth + 0.52f; z <= halfDepth - 0.52f; z += step)
+                for (var z = -halfDepth + margin; z <= halfDepth - margin; z += step)
                 {
-                    var candidate = new Vector3(x + UnityEngine.Random.Range(-0.08f, 0.08f), 0f, z + UnityEngine.Random.Range(-0.08f, 0.08f));
+                    var candidate = new Vector3(x + UnityEngine.Random.Range(-m_floorSlotJitter, m_floorSlotJitter), 0f, z + UnityEngine.Random.Range(-m_floorSlotJitter, m_floorSlotJitter));
                     if (IsInCentralAisle(candidate) || HorizontalDistance(candidate, PlayerStartPosition) <= m_playerClearance)
                     {
                         continue;
                     }
 
-                    if (IsInsideAnyNavigationObstacle(candidate, 0.38f))
+                    if (IsInsideAnyNavigationObstacle(candidate, m_floorObstacleClearance))
                     {
                         continue;
                     }
@@ -2834,12 +2945,12 @@ namespace SimJam.BarrelSimulator
                 var localPositions = new List<Vector3>
                 {
                     Vector3.zero,
-                    new Vector3(-table.Size.x * 0.28f, 0f, 0f),
-                    new Vector3(table.Size.x * 0.28f, 0f, 0f),
-                    new Vector3(0f, 0f, -table.Size.y * 0.24f),
-                    new Vector3(0f, 0f, table.Size.y * 0.24f),
-                    new Vector3(-table.Size.x * 0.28f, 0f, -table.Size.y * 0.24f),
-                    new Vector3(table.Size.x * 0.28f, 0f, table.Size.y * 0.24f)
+                    new Vector3(-table.Size.x * m_tableSideSlotFactor, 0f, 0f),
+                    new Vector3(table.Size.x * m_tableSideSlotFactor, 0f, 0f),
+                    new Vector3(0f, 0f, -table.Size.y * m_tableEndSlotFactor),
+                    new Vector3(0f, 0f, table.Size.y * m_tableEndSlotFactor),
+                    new Vector3(-table.Size.x * m_tableSideSlotFactor, 0f, -table.Size.y * m_tableEndSlotFactor),
+                    new Vector3(table.Size.x * m_tableSideSlotFactor, 0f, table.Size.y * m_tableEndSlotFactor)
                 };
 
                 foreach (var localPosition in localPositions)
@@ -2861,7 +2972,7 @@ namespace SimJam.BarrelSimulator
                         AllowedSizes = localPosition == Vector3.zero
                             ? new[] { BarrelSize.Gallon55, BarrelSize.Gallon30, BarrelSize.Gallon5 }
                             : new[] { BarrelSize.Gallon30, BarrelSize.Gallon5 },
-                        AllowSideways = localPosition == Vector3.zero && UnityEngine.Random.value > 0.45f,
+                        AllowSideways = localPosition == Vector3.zero && UnityEngine.Random.value > m_tableCentreSidewaysThreshold,
                         SurfaceYaw = table.Transform.eulerAngles.y,
                         SourceName = table.Name
                     });
@@ -2885,10 +2996,10 @@ namespace SimJam.BarrelSimulator
                 {
                     var surfaceY = surfaceHeights != null
                         ? surfaceHeights[tier]
-                        : 0.85f + tier * 0.52f + m_shelfSurfaceClearance;
+                        : m_shelfTierBaseHeight + tier * m_shelfTierSpacing + m_shelfSurfaceClearance;
                     // Inset the run of slots by a 5 gal barrel's radius (~0.12) + margin so the end
                     // barrels stay fully on the board instead of hanging off the ends.
-                    var halfUsable = Mathf.Max(0f, usableSize.x * 0.5f - 0.17f);
+                    var halfUsable = Mathf.Max(0f, usableSize.x * 0.5f - m_shelfBoardEndInset);
                     var count = Mathf.Max(1, Mathf.FloorToInt(halfUsable * 2f / m_shelfBarrelSpacing));
                     for (var i = 0; i < count; i++)
                     {
@@ -2990,11 +3101,11 @@ namespace SimJam.BarrelSimulator
                     Label = "55 GAL",
                     Prefab = m_barrelPrefabs.barrel55GallonPrefab,
                     ModelScale = m_barrel55ModelScale,
-                    Diameter = 0.58f,
-                    Height = 0.9f,
-                    LabelHeight = 0.46f,
-                    BodyColor = new Color(0.17f, 0.28f, 0.42f),
-                    SelectionWeight = 0.14f
+                    Diameter = m_barrel55Diameter,
+                    Height = m_barrel55Height,
+                    LabelHeight = m_barrel55LabelHeight,
+                    BodyColor = m_barrel55BodyColor,
+                    SelectionWeight = m_barrel55Weight
                 },
                 [BarrelSize.Gallon30] = new BarrelSpec
                 {
@@ -3002,11 +3113,11 @@ namespace SimJam.BarrelSimulator
                     Label = "30 GAL",
                     Prefab = m_barrelPrefabs.barrel30GallonPrefab,
                     ModelScale = m_barrel30ModelScale,
-                    Diameter = 0.48f,
-                    Height = 0.72f,
-                    LabelHeight = 0.36f,
-                    BodyColor = new Color(0.32f, 0.35f, 0.38f),
-                    SelectionWeight = 0.26f
+                    Diameter = m_barrel30Diameter,
+                    Height = m_barrel30Height,
+                    LabelHeight = m_barrel30LabelHeight,
+                    BodyColor = m_barrel30BodyColor,
+                    SelectionWeight = m_barrel30Weight
                 },
                 [BarrelSize.Gallon5] = new BarrelSpec
                 {
@@ -3014,11 +3125,11 @@ namespace SimJam.BarrelSimulator
                     Label = "5 GAL",
                     Prefab = m_barrelPrefabs.barrel5GallonPrefab,
                     ModelScale = m_barrel5ModelScale,
-                    Diameter = 0.24f,
-                    Height = 0.31f,
-                    LabelHeight = 0.17f,
-                    BodyColor = new Color(0.93f, 0.83f, 0.22f),
-                    SelectionWeight = 0.6f
+                    Diameter = m_barrel5Diameter,
+                    Height = m_barrel5Height,
+                    LabelHeight = m_barrel5LabelHeight,
+                    BodyColor = m_barrel5BodyColor,
+                    SelectionWeight = m_barrel5Weight
                 }
             };
         }
@@ -3063,7 +3174,7 @@ namespace SimJam.BarrelSimulator
             EnsureScenarioRoot();
             var labelForward = slot.LabelForward.sqrMagnitude > 0.001f ? slot.LabelForward.normalized : Vector3.forward;
             // Random spin around the barrel's own axis so the same model face never repeats.
-            var spinYaw = UnityEngine.Random.Range(0f, 360f);
+            var spinYaw = UnityEngine.Random.Range(m_barrelSpinRange.x, m_barrelSpinRange.y);
             var yawRotation = Quaternion.LookRotation(labelForward, Vector3.up) * Quaternion.Euler(0f, spinYaw, 0f);
             var finalRotation = isSideways ? yawRotation * Quaternion.Euler(0f, 0f, 90f) : yawRotation;
             var verticalOffset = isSideways ? spec.Diameter * 0.5f : spec.Height * 0.5f;
