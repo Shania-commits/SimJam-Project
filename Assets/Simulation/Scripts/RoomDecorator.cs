@@ -2,18 +2,48 @@ using UnityEngine;
 
 namespace SimJam.BarrelSimulator
 {
+    /// <summary>
+    /// Static helper that layers purely-cosmetic detail props onto the procedurally-built rooms:
+    /// baseboards, door frames, exit signs, hazard stripes, ceiling conduits, the detector pedestal,
+    /// and cheap fake-shadow quads. Called by the spawner after the shell/walls exist so the lab and
+    /// spawn (office) rooms look furnished instead of like bare boxes. All parts are created at runtime.
+    /// </summary>
     public static class RoomDecorator
     {
+        /// <summary>
+        /// Delegate the spawner passes in so decorator parts can be given materials built by the
+        /// spawner's own material factory (which tracks/frees runtime materials and applies the
+        /// correct Standard-shader settings). Mirrors the spawner's material-creation signature.
+        /// </summary>
         public delegate Material MaterialFactory(Color color, string name, float metallic, float smoothness, Texture2D albedo, Color? emission);
 
+        /// <summary>
+        /// World-space Y (local to the pedestal root) of the pedestal cap surface, so the spawner
+        /// knows where to rest the detector on top of the pedestal built by <see cref="BuildDetectorPedestal"/>.
+        /// </summary>
         public const float PedestalTopHeight = 1.02f;
 
         // Captured by DecorateOfficeRoom so the spawn-side door frame mirrors the doorway.
+        /// <summary>Doorway width recorded by <see cref="DecorateOfficeRoom"/> so <see cref="DecorateSpawnRoom"/> can mirror the frame on the other side of the shared wall.</summary>
         private static float lastDoorwayWidth = 1.0f;
+        /// <summary>Doorway height recorded by <see cref="DecorateOfficeRoom"/> so the spawn-side door frame matches the lab-side opening.</summary>
         private static float lastDoorwayHeight = 2.1f;
 
+        /// <summary>Cached instance of the pre-authored SimJamBlobShadow material, created lazily on first <see cref="AddBlobShadow"/> call and reused for every blob shadow.</summary>
         private static Material blobShadowMaterial;
 
+        /// <summary>
+        /// Decorates the lab (main game) room: adds baseboards around the walls, a wooden door frame,
+        /// glowing exit sign and floor hazard stripe at the doorway, and overhead conduits with
+        /// junction boxes. Also records the doorway size so the spawn room's frame can mirror it.
+        /// </summary>
+        /// <param name="roomRoot">Parent transform all decor is nested under.</param>
+        /// <param name="roomSizeMeters">Interior floor footprint (x = width, y = depth) of the lab.</param>
+        /// <param name="wallHeight">Wall/ceiling height, used to place conduits near the ceiling.</param>
+        /// <param name="doorwayWidth">Width of the doorway opening in the shared wall.</param>
+        /// <param name="doorwayHeight">Height of the doorway opening in the shared wall.</param>
+        /// <param name="sharedWallZ">Z of the wall shared between the lab and spawn rooms.</param>
+        /// <param name="createMaterial">Spawner-supplied factory for tracked runtime materials.</param>
         public static void DecorateOfficeRoom(Transform roomRoot, Vector2 roomSizeMeters, float wallHeight, float doorwayWidth, float doorwayHeight, float sharedWallZ, MaterialFactory createMaterial)
         {
             lastDoorwayWidth = doorwayWidth;
@@ -63,6 +93,18 @@ namespace SimJam.BarrelSimulator
             CreatePart(PrimitiveType.Cube, "Junction Box C", roomRoot, new Vector3(-w * 0.5f + 0.095f, conduitY, d * 0.5f - 0.5f), new Vector3(0.14f, 0.14f, 0.09f), Quaternion.Euler(0f, 90f, 0f), conduitMat, false);
         }
 
+        /// <summary>
+        /// Decorates the spawn (starting/office) room on the opposite side of the shared wall: adds
+        /// baseboards around its walls and along the shared wall (split around the doorway), plus a
+        /// wooden door frame that mirrors the lab-side opening using the sizes cached by
+        /// <see cref="DecorateOfficeRoom"/>. Must be called after the office room so those sizes exist.
+        /// </summary>
+        /// <param name="roomRoot">Parent transform all decor is nested under.</param>
+        /// <param name="spawnCenter">World center of the spawn room floor.</param>
+        /// <param name="spawnSizeMeters">Interior floor footprint (x = width, y = depth) of the spawn room.</param>
+        /// <param name="wallHeight">Wall/ceiling height of the spawn room.</param>
+        /// <param name="sharedWallZ">Z of the wall shared with the lab room.</param>
+        /// <param name="createMaterial">Spawner-supplied factory for tracked runtime materials.</param>
         public static void DecorateSpawnRoom(Transform roomRoot, Vector3 spawnCenter, Vector2 spawnSizeMeters, float wallHeight, float sharedWallZ, MaterialFactory createMaterial)
         {
             float w = spawnSizeMeters.x;
@@ -101,6 +143,16 @@ namespace SimJam.BarrelSimulator
             CreatePart(PrimitiveType.Cube, "Door Lintel (Spawn)", roomRoot, new Vector3(0f, floorY + lastDoorwayHeight + 0.005f, frameZ), new Vector3(lastDoorwayWidth + 0.18f, 0.07f, 0.07f), Quaternion.identity, woodMat, false);
         }
 
+        /// <summary>
+        /// Builds the concrete pedestal the identiFINDER detector starts resting on: a stacked
+        /// base/column/cap (with colliders so the tool sits on top), decorative accent strip and
+        /// labelled plaque (no colliders), and a soft point light to draw the player's eye. The
+        /// cap surface sits at <see cref="PedestalTopHeight"/> above the pedestal root.
+        /// </summary>
+        /// <param name="parent">Transform the pedestal root is nested under.</param>
+        /// <param name="floorPosition">World floor position where the pedestal is placed.</param>
+        /// <param name="createMaterial">Spawner-supplied factory for tracked runtime materials.</param>
+        /// <returns>The pedestal root GameObject.</returns>
         public static GameObject BuildDetectorPedestal(Transform parent, Vector3 floorPosition, MaterialFactory createMaterial)
         {
             GameObject root = new GameObject("Detector Pedestal");
@@ -134,6 +186,16 @@ namespace SimJam.BarrelSimulator
             return root;
         }
 
+        /// <summary>
+        /// Adds a cheap fake ground shadow: a flat textured quad laid just above the floor under a
+        /// prop (barrels, pedestal, etc.). Lazily instances the pre-authored SimJamBlobShadow
+        /// material (forced into builds to survive shader stripping) and returns null if that
+        /// material can't be loaded. The quad has no collider.
+        /// </summary>
+        /// <param name="parent">Transform the shadow quad is nested under.</param>
+        /// <param name="worldPosition">Floor point the shadow is centered over.</param>
+        /// <param name="radius">Shadow radius in meters (quad is 2*radius square).</param>
+        /// <returns>The created shadow quad, or null if the shadow material is missing.</returns>
         public static GameObject AddBlobShadow(Transform parent, Vector3 worldPosition, float radius)
         {
             if (blobShadowMaterial == null)
@@ -158,6 +220,20 @@ namespace SimJam.BarrelSimulator
             return quad;
         }
 
+        /// <summary>
+        /// Shared helper that spawns a single primitive decor piece: creates the primitive, names and
+        /// parents it, applies local transform + material, and toggles its collider (most cosmetic
+        /// parts disable it; structural pedestal parts keep it so the detector can rest on them).
+        /// </summary>
+        /// <param name="type">Unity primitive to create (Cube, Cylinder, Quad, ...).</param>
+        /// <param name="name">GameObject name for hierarchy readability.</param>
+        /// <param name="parent">Transform the part is nested under.</param>
+        /// <param name="localPosition">Local position relative to the parent.</param>
+        /// <param name="localScale">Local scale (part dimensions).</param>
+        /// <param name="localRotation">Local rotation.</param>
+        /// <param name="material">Shared material to assign to the renderer.</param>
+        /// <param name="colliderEnabled">Whether the primitive's collider stays enabled.</param>
+        /// <returns>The created part GameObject.</returns>
         private static GameObject CreatePart(PrimitiveType type, string name, Transform parent, Vector3 localPosition, Vector3 localScale, Quaternion localRotation, Material material, bool colliderEnabled)
         {
             GameObject part = GameObject.CreatePrimitive(type);

@@ -7,55 +7,104 @@ using UnityEngine;
 
 namespace SimJam.BarrelSimulator
 {
+    /// <summary>
+    /// Spawner that scatters radioactive-barrel props onto the player's real-world floor using the
+    /// Meta MR Utility Kit (MRUK) room scan. Instead of building a fixed procedural lab, it loads the
+    /// Quest's captured room geometry at runtime and places a randomized number of barrels on valid
+    /// floor spots (respecting wall/edge/player/spacing clearances), assigns each a random radiation
+    /// count, and shows a head-locked status label. Controller buttons let the player reshuffle, clear,
+    /// re-roll counts, and rescale the barrels live. This is the mixed-reality "play in your own room"
+    /// variant of the find-the-hidden-barrel game loop.
+    /// </summary>
     public class RandomRoomBarrelSpawner : MonoBehaviour
     {
         [Header("Barrel prefab")]
+        /// <summary>Prefab instantiated for each spawned barrel; if null, a primitive placeholder barrel is built instead.</summary>
         [SerializeField] private GameObject m_barrelPrefab;
+        /// <summary>Optional profile that supplies realistic random radiation counts per barrel; falls back to a generated pool when unset.</summary>
         [SerializeField] private RadiationCountProfile m_radiationCountProfile;
+        /// <summary>Local scale applied to each spawned barrel prefab (tuned to the identiFINDER-scale drum art).</summary>
         [SerializeField] private Vector3 m_barrelSpawnScale = new Vector3(0.19567f, 0.1853504f, 0.19567f);
+        /// <summary>Fractional step used when the player grows/shrinks barrels at runtime via the thumbstick.</summary>
         [SerializeField, Range(0.01f, 0.5f)] private float m_runtimeScaleStep = 0.15f;
+        /// <summary>Min (x) and max (y) clamp bounds applied to each axis of the live barrel scale.</summary>
         [SerializeField] private Vector2 m_runtimeScaleLimits = new Vector2(0.03f, 3f);
+        /// <summary>When true, each barrel displays a floating debug label showing its assigned radiation count.</summary>
         [SerializeField] private bool m_showDebugCountLabels = true;
 
         [Header("Status label")]
+        /// <summary>Distance in front of the camera at which the head-locked status label floats.</summary>
         [SerializeField, Min(0.5f)] private float m_statusLabelDistance = 2.25f;
+        /// <summary>Vertical offset (world Y) applied to the head-locked status label so it sits below eye line.</summary>
         [SerializeField] private float m_statusLabelVerticalOffset = -0.55f;
+        /// <summary>World character size of the status label TextMesh.</summary>
         [SerializeField, Min(0.01f)] private float m_statusLabelCharacterSize = 0.04f;
+        /// <summary>Font point size used when rendering the status label TextMesh.</summary>
         [SerializeField, Min(8)] private int m_statusLabelFontSize = 48;
+        /// <summary>Seconds to wait for the user to grant the Scene/Spatial-Data permission before giving up.</summary>
         [SerializeField, Min(1f)] private float m_scenePermissionWaitSeconds = 20f;
 
         [Header("Run randomization")]
+        /// <summary>Inclusive lower bound on the number of barrels spawned per run.</summary>
         [SerializeField, Min(1)] private int m_minBarrels = 3;
+        /// <summary>Inclusive upper bound on the number of barrels spawned per run.</summary>
         [SerializeField, Min(1)] private int m_maxBarrels = 6;
+        /// <summary>Probability [0..1] that any given barrel is placed upright rather than lying on its side.</summary>
         [SerializeField, Range(0f, 1f)] private float m_uprightProbability = 0.6f;
+        /// <summary>When true, seeds Unity's RNG with <see cref="m_fixedSeed"/> so runs are reproducible.</summary>
         [SerializeField] private bool m_useFixedSeed;
+        /// <summary>Deterministic seed used for placement/orientation when <see cref="m_useFixedSeed"/> is enabled.</summary>
         [SerializeField] private int m_fixedSeed = 12345;
 
         [Header("Placement constraints")]
+        /// <summary>Minimum distance a barrel must sit from the floor's edge when sampling a surface point.</summary>
         [SerializeField, Min(0.05f)] private float m_floorEdgeClearance = 0.45f;
+        /// <summary>Minimum distance a candidate spot must keep from any wall face.</summary>
         [SerializeField, Min(0.05f)] private float m_wallClearance = 0.6f;
+        /// <summary>Clearance used when rejecting candidates that overlap detected scene volumes (furniture, etc.).</summary>
         [SerializeField, Min(0.05f)] private float m_sceneVolumeClearance = 0.25f;
+        /// <summary>Minimum spacing enforced between two spawned barrels.</summary>
         [SerializeField, Min(0.05f)] private float m_barrelSpacing = 0.85f;
+        /// <summary>Minimum distance a barrel must keep from the player's head so nothing spawns on top of them.</summary>
         [SerializeField, Min(0.05f)] private float m_playerClearance = 1.1f;
+        /// <summary>How many random surface samples to try before giving up on placing a single barrel.</summary>
         [SerializeField, Min(1)] private int m_maxAttemptsPerBarrel = 120;
+        /// <summary>Height offset above the floor for an upright barrel (raises its pivot to the drum's mid-height).</summary>
         [SerializeField] private float m_uprightFloorOffset = 0.35f;
+        /// <summary>Height offset above the floor for a barrel lying on its side.</summary>
         [SerializeField] private float m_sidewaysFloorOffset = 0.18f;
 
         [Header("Fallback counts")]
+        /// <summary>Size of the pre-generated random-count pool used when no <see cref="RadiationCountProfile"/> is assigned.</summary>
         [SerializeField, Min(1)] private int m_fallbackCountPoolSize = 2048;
+        /// <summary>Lower bound for values in the fallback random-count pool.</summary>
         [SerializeField, Min(0)] private int m_fallbackMinCount = 250;
+        /// <summary>Upper bound for values in the fallback random-count pool.</summary>
         [SerializeField, Min(0)] private int m_fallbackMaxCount = 50000;
 
+        /// <summary>All barrel instances spawned in the current run (destroyed on clear/reshuffle).</summary>
         private readonly List<BarrelInstance> m_spawnedBarrels = new();
+        /// <summary>World positions of spawned barrels, used to enforce inter-barrel spacing.</summary>
         private readonly List<Vector3> m_spawnedPositions = new();
+        /// <summary>Cached pool of random radiation counts used when no profile is assigned.</summary>
         private int[] m_fallbackCountPool;
+        /// <summary>The MRUK room scan currently used as the placement surface source.</summary>
         private MRUKRoom m_currentRoom;
+        /// <summary>Head-locked TextMesh that reports loading/placement status to the player.</summary>
         private TextMesh m_statusLabel;
+        /// <summary>Human-readable reason the room failed to load, shown to the player and reused on retry.</summary>
         private string m_roomLoadFailureStatus;
+        /// <summary>True once a room has loaded successfully and runs can be generated.</summary>
         private bool m_isReady;
+        /// <summary>Guards <see cref="GenerateRun"/> against re-entry while a run is being built.</summary>
         private bool m_isGenerating;
+        /// <summary>True while the async MRUK room load is in progress.</summary>
         private bool m_isLoadingRoom;
 
+        /// <summary>
+        /// Unity entry point: disables the borrowed object-detection sample components, spins up the
+        /// status label, then asynchronously loads the Quest room scan and generates the first run.
+        /// </summary>
         private async void Start()
         {
             DisableObjectDetectionSampleComponents();
@@ -84,6 +133,10 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>
+        /// Per-frame loop: keeps the status label in front of the player and polls controller input for
+        /// reshuffle (A/pinch), clear (B/middle-pinch), re-roll counts (X), and grow/shrink (thumbstick).
+        /// </summary>
         private void Update()
         {
             UpdateStatusLabelPose();
@@ -123,6 +176,11 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>
+        /// Clears any existing barrels and lays out a fresh randomized run: picks a barrel count, builds
+        /// an upright/sideways orientation plan, then searches the room for valid floor placements and
+        /// spawns a barrel at each. Reports how many of the target count were successfully placed.
+        /// </summary>
         public void GenerateRun()
         {
             if (!m_isReady || m_currentRoom == null || m_isGenerating)
@@ -168,6 +226,11 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>
+        /// Builds a per-barrel upright/sideways plan by rolling <see cref="m_uprightProbability"/> for each
+        /// slot, then forces at least one flip when every barrel came out the same way so runs always mix
+        /// both orientations (only when more than one barrel is requested).
+        /// </summary>
         private bool[] BuildOrientationPlan(int targetCount)
         {
             var orientations = new bool[targetCount];
@@ -190,6 +253,7 @@ namespace SimJam.BarrelSimulator
             return orientations;
         }
 
+        /// <summary>Destroys all spawned barrel GameObjects and resets the tracking lists.</summary>
         public void ClearBarrels()
         {
             foreach (var barrel in m_spawnedBarrels)
@@ -204,6 +268,10 @@ namespace SimJam.BarrelSimulator
             m_spawnedPositions.Clear();
         }
 
+        /// <summary>
+        /// Re-rolls the radiation count on every currently spawned barrel without moving them, rebuilding
+        /// both the profile's generated pool and the fallback pool first so the new values are fresh.
+        /// </summary>
         public void RandomizeRadiationCounts()
         {
             if (m_spawnedBarrels.Count == 0)
@@ -226,6 +294,11 @@ namespace SimJam.BarrelSimulator
             SetStatus("Randomized barrel counts.");
         }
 
+        /// <summary>
+        /// Ensures Scene permission, obtains (or creates) the MRUK instance, configures it for a manual
+        /// device load, and returns the current room scan — requesting Space Setup capture if none exists.
+        /// Returns null and sets <see cref="m_roomLoadFailureStatus"/> on any failure.
+        /// </summary>
         private async Task<MRUKRoom> LoadRoomAsync()
         {
             m_roomLoadFailureStatus = null;
@@ -272,6 +345,10 @@ namespace SimJam.BarrelSimulator
             return room;
         }
 
+        /// <summary>
+        /// Requests the Quest Scene/Spatial-Data permission if not already granted and polls until it is
+        /// granted or the wait times out. Returns true once permission is available.
+        /// </summary>
         private async Task<bool> EnsureScenePermissionAsync()
         {
             if (OVRPermissionsRequester.IsPermissionGranted(OVRPermissionsRequester.Permission.Scene))
@@ -297,6 +374,7 @@ namespace SimJam.BarrelSimulator
             return false;
         }
 
+        /// <summary>Maps an MRUK device-load failure code to a player-facing instruction on how to fix it.</summary>
         private static string GetRoomLoadFailureStatus(MRUK.LoadDeviceResult result)
         {
             return result switch
@@ -312,6 +390,10 @@ namespace SimJam.BarrelSimulator
             };
         }
 
+        /// <summary>
+        /// Sets MRUK's scene settings to load room data from the device on demand (not on startup) with
+        /// high-fidelity geometry, so this spawner controls exactly when the room is fetched.
+        /// </summary>
         private static void ConfigureMrukForManualDeviceLoad(MRUK mruk)
         {
             mruk.SceneSettings ??= new MRUK.MRUKSettings();
@@ -320,6 +402,7 @@ namespace SimJam.BarrelSimulator
             mruk.SceneSettings.EnableHighFidelityScene = true;
         }
 
+        /// <summary>Returns MRUK's active room, falling back to the first loaded room, or null if none exist.</summary>
         private static MRUKRoom GetCurrentRoom(MRUK mruk)
         {
             if (mruk == null)
@@ -336,6 +419,13 @@ namespace SimJam.BarrelSimulator
             return mruk.Rooms.Count > 0 ? mruk.Rooms[0] : null;
         }
 
+        /// <summary>
+        /// Repeatedly samples random points on the room's floor and returns the first that satisfies all
+        /// placement constraints (inside room, clear of scene volumes, walls, the player, and other
+        /// barrels). Outputs the accepted world position, a floor-aligned rotation with random yaw (tipped
+        /// 90 deg for sideways barrels), and a descriptive orientation name. Returns false if no valid
+        /// spot is found within <see cref="m_maxAttemptsPerBarrel"/> attempts.
+        /// </summary>
         private bool TryFindPlacement(bool isUpright, out Vector3 position, out Quaternion rotation, out string orientationName)
         {
             var floorFilter = new LabelFilter(MRUKAnchor.SceneLabels.FLOOR);
@@ -390,6 +480,10 @@ namespace SimJam.BarrelSimulator
             return false;
         }
 
+        /// <summary>
+        /// Instantiates the barrel prefab (or a primitive placeholder) at the given pose, ensures it has a
+        /// <see cref="BarrelInstance"/>, and initializes it with the orientation name and a random count.
+        /// </summary>
         private BarrelInstance SpawnBarrel(Vector3 position, Quaternion rotation, string orientationName)
         {
             GameObject barrelObject;
@@ -413,6 +507,10 @@ namespace SimJam.BarrelSimulator
             return barrel;
         }
 
+        /// <summary>
+        /// Builds a simple yellow cylinder stand-in barrel used when no <see cref="m_barrelPrefab"/> is
+        /// assigned, so placement/gameplay can still be tested without the real drum art.
+        /// </summary>
         private GameObject CreatePlaceholderBarrel(Vector3 position, Quaternion rotation, Transform parent)
         {
             var root = new GameObject("Placeholder Random Barrel");
@@ -433,6 +531,7 @@ namespace SimJam.BarrelSimulator
             return root;
         }
 
+        /// <summary>Returns true if the candidate position is within <see cref="m_barrelSpacing"/> of any already-placed barrel.</summary>
         private bool IsTooCloseToExistingBarrel(Vector3 candidate)
         {
             foreach (var existingPosition in m_spawnedPositions)
@@ -446,6 +545,7 @@ namespace SimJam.BarrelSimulator
             return false;
         }
 
+        /// <summary>Returns the player's head position (main camera), or the origin if no camera is present.</summary>
         private Vector3 GetPlayerPosition()
         {
             if (Camera.main != null)
@@ -456,6 +556,10 @@ namespace SimJam.BarrelSimulator
             return Vector3.zero;
         }
 
+        /// <summary>
+        /// Multiplies the current barrel spawn scale (clamped to the configured limits) and applies it live
+        /// to every spawned barrel, letting the player calibrate drum size in-headset via the thumbstick.
+        /// </summary>
         private void AdjustRuntimeBarrelScale(float multiplier)
         {
             var nextScale = m_barrelSpawnScale * multiplier;
@@ -475,6 +579,10 @@ namespace SimJam.BarrelSimulator
             SetStatus($"Barrel scale: {m_barrelSpawnScale.x:0.00}, {m_barrelSpawnScale.y:0.00}, {m_barrelSpawnScale.z:0.00}");
         }
 
+        /// <summary>
+        /// Returns a random radiation count from the assigned <see cref="RadiationCountProfile"/>, or from
+        /// the internally generated fallback pool when no profile is set.
+        /// </summary>
         private int GetRandomRadiationCount()
         {
             if (m_radiationCountProfile != null)
@@ -486,6 +594,7 @@ namespace SimJam.BarrelSimulator
             return m_fallbackCountPool[UnityEngine.Random.Range(0, m_fallbackCountPool.Length)];
         }
 
+        /// <summary>Lazily (re)builds the fallback count pool if it is missing or no longer matches the configured size.</summary>
         private void EnsureFallbackCountPool()
         {
             if (m_fallbackCountPool == null || m_fallbackCountPool.Length != Mathf.Max(1, m_fallbackCountPoolSize))
@@ -494,6 +603,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Fills the fallback count pool with fresh uniform-random values between the configured min and max.</summary>
         private void RebuildFallbackCountPool()
         {
             var safePoolSize = Mathf.Max(1, m_fallbackCountPoolSize);
@@ -507,6 +617,11 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>
+        /// Disables and deactivates the leftover Passthrough Camera object-detection sample managers
+        /// (detection, Sentis inference, and their UI) so the borrowed sample scene does not run its ML
+        /// pipeline alongside this barrel game.
+        /// </summary>
         private void DisableObjectDetectionSampleComponents()
         {
             foreach (var manager in FindObjectsByType<DetectionManager>(FindObjectsInactive.Include, FindObjectsSortMode.None))
@@ -533,6 +648,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Lazily creates the head-locked status TextMesh (centered white text) parented to this spawner.</summary>
         private void EnsureStatusLabel()
         {
             if (m_statusLabel != null)
@@ -550,6 +666,7 @@ namespace SimJam.BarrelSimulator
             m_statusLabel.color = Color.white;
         }
 
+        /// <summary>Logs the given message and mirrors it onto the in-world status label.</summary>
         private void SetStatus(string message)
         {
             Debug.Log($"RandomRoomBarrelSpawner: {message}");
@@ -559,6 +676,10 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>
+        /// Repositions the status label each frame to float a fixed distance in front of the camera and
+        /// face the player, keeping it readable as the head moves.
+        /// </summary>
         private void UpdateStatusLabelPose()
         {
             if (m_statusLabel == null || Camera.main == null)

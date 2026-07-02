@@ -17,29 +17,51 @@ namespace SimJam
     [DisallowMultipleComponent]
     public class VrUiPointer : MonoBehaviour
     {
+        /// <summary>How far the laser ray reaches (metres) before it stops looking for buttons.</summary>
         [SerializeField, Min(0.5f)] private float m_maxLength = 6f;
+        /// <summary>OVR controller button that counts as a "click" on the hovered UI button (right index trigger by default).</summary>
         [SerializeField] private OVRInput.RawButton m_clickButton = OVRInput.RawButton.RIndexTrigger;
+        /// <summary>Fraction the button's rect is inflated by when testing for a hit, giving a more forgiving aim target.</summary>
         [SerializeField, Range(0f, 0.6f)] private float m_hitPadding = 0.25f; // forgiving hit area
+        /// <summary>Laser/cursor tint when not aimed at a clickable button (cyan).</summary>
         [SerializeField] private Color m_idleColor = new Color(0.35f, 0.8f, 1f, 0.9f);
+        /// <summary>Laser/cursor tint when aimed at an interactable button (green), signalling "on target".</summary>
         [SerializeField] private Color m_hitColor = new Color(0.3f, 1f, 0.45f, 0.95f);
 
+        /// <summary>
+        /// True while the laser rests on a clickable button this frame; locomotion reads this to avoid
+        /// teleporting when the index trigger (also the click button) is used to click a UI button.
+        /// </summary>
         // True while the laser rests on a clickable button this frame; locomotion reads this to avoid
         // teleporting when the index trigger (also the click button) is used to click a UI button.
         public bool IsHoveringClickable { get; private set; }
 
+        /// <summary>Cached OVR camera rig, used to locate the right-hand controller anchor to cast from.</summary>
         private OVRCameraRig m_rig;
+        /// <summary>Transform the laser originates from (right hand/controller anchor).</summary>
         private Transform m_ray;
+        /// <summary>Runtime-built line that visually draws the laser beam.</summary>
         private LineRenderer m_line;
+        /// <summary>Transform of the sphere cursor drawn at the laser's hit point.</summary>
         private Transform m_cursor;
+        /// <summary>Renderer of the cursor sphere, recoloured to match the idle/hit state.</summary>
         private Renderer m_cursorRenderer;
+        /// <summary>Cached set of scene buttons the laser can hit, refreshed periodically.</summary>
         private Button[] m_buttons = Array.Empty<Button>();
+        /// <summary>Unscaled time at which the button list is next re-scanned.</summary>
         private float m_nextScan;
 
+        /// <summary>Builds the laser + cursor visuals when the pointer first comes alive.</summary>
         private void Start()
         {
             BuildLaser();
         }
 
+        /// <summary>
+        /// Per-frame pointer loop: aims the ray from the controller, finds the nearest hit button,
+        /// updates the laser/cursor colour + cursor size, exposes <see cref="IsHoveringClickable"/>,
+        /// and invokes the hovered button's onClick when the click button is pressed.
+        /// </summary>
         private void Update()
         {
             ResolveRay();
@@ -110,6 +132,10 @@ namespace SimJam
             }
         }
 
+        /// <summary>
+        /// Lazily resolves the transform the laser fires from by locating the OVR rig and preferring
+        /// its right-hand anchor (falling back to the right controller anchor). Caches on success.
+        /// </summary>
         private void ResolveRay()
         {
             if (m_ray != null)
@@ -128,6 +154,11 @@ namespace SimJam
             }
         }
 
+        /// <summary>
+        /// True if the ray crosses the button's world-space rectangle (inflated by padding); outputs
+        /// the world hit point. Builds the rect's plane from its world corners, raycasts it, then
+        /// range-checks the hit in the rect's local space.
+        /// </summary>
         // True if the ray crosses the button's world-space rectangle (inflated by padding); outputs
         // the world hit point.
         private static bool RayHitsRect(Ray ray, RectTransform rect, float padding, out Vector3 point)
@@ -150,6 +181,11 @@ namespace SimJam
                    && local.y >= r.yMin - padY && local.y <= r.yMax + padY;
         }
 
+        /// <summary>
+        /// Constructs the laser visuals at runtime: a thin LineRenderer beam and a small sphere
+        /// cursor (collider stripped), both using the shader-stripping-safe "Sprites/Default" shader.
+        /// Starts hidden.
+        /// </summary>
         private void BuildLaser()
         {
             var laserGo = new GameObject("UI Laser Pointer");
@@ -184,6 +220,7 @@ namespace SimJam
             SetVisible(false);
         }
 
+        /// <summary>Shows or hides the laser beam, and always hides the cursor when turning invisible.</summary>
         private void SetVisible(bool visible)
         {
             if (m_line != null)

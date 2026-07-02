@@ -13,6 +13,11 @@ namespace SimJam.BarrelSimulator
     // so the solver is independent of which local axis Mixamo/the FBX importer made "down the bone".
     // Everything runs in LateUpdate, strictly parent-before-child, because writing a parent's world
     // rotation immediately moves its children that same frame.
+    /// <summary>
+    /// Runtime IK driver for the player's visible arms: places a Mixamo-rigged arm mesh onto the OVR rig
+    /// (chest anchored to the head, wrists tracking the controllers) so the held identiFINDER detector
+    /// appears to be gripped by real, bending arms. No Animator — pose is solved analytically each frame.
+    /// </summary>
     public class MixamoArmRig : MonoBehaviour
     {
         // Tunables — sensible defaults; expose-and-nudge on-device. 0 = left, 1 = right.
@@ -20,56 +25,95 @@ namespace SimJam.BarrelSimulator
         // mis-scaled FBX (the cause of an always-straight elbow: when reach < shoulder->controller
         // distance the cos-law solver pins the elbow to full extension). MaxReachFraction is a small
         // minimum-bend floor so a fully-stretched arm still reads slightly bent, never locked.
+        /// <summary>Target shoulder-to-wrist reach in metres; the whole rig is auto-scaled at init so its
+        /// measured arm length matches this, correcting a mis-scaled FBX that would otherwise lock the elbow.</summary>
         public float TargetArmReach = 0.58f;
+        /// <summary>Fraction of full arm length the solver may reach before clamping, so a fully-extended arm
+        /// still reads slightly bent instead of snapping to a locked straight line.</summary>
         [Range(0.85f, 0.999f)] public float MaxReachFraction = 0.99f;
         // Max distance the shoulder may slide toward the controller when the target is beyond arm reach,
         // so the wrist reaches the controller and a held tool stays in the hand instead of floating. This
         // translates only the upper-arm bone, so the continuous shoulder skin stretches a little at the
         // extreme -- kept small and gated to near-full extension (and the shoulder is usually below the VR
         // field of view). 0 disables shoulder stretch entirely.
+        /// <summary>Max metres the shoulder may slide toward the controller when it is beyond arm reach, so the
+        /// wrist still meets the controller and a held tool stays in the hand instead of floating; 0 disables it.</summary>
         public float MaxShoulderStretch = 0.1f;
+        /// <summary>Offset from the headset to the estimated torso point (chest bone), in yaw-aligned body space,
+        /// used to position the arm rig below and slightly behind the head.</summary>
         public Vector3 ChestOffsetFromHead = new Vector3(0f, -0.16f, -0.05f);
+        /// <summary>Offset from the controller anchor to the actual wrist IK target, in controller-local space,
+        /// so the hand sits naturally around the grip instead of exactly at the controller origin.</summary>
         public Vector3 WristTargetLocalOffset = new Vector3(0f, -0.01f, -0.045f);
+        /// <summary>Elbow pole hint (in chest-yaw space) biasing the elbow out/down/back; its x is mirrored per side.</summary>
         public Vector3 ElbowPoleLocal = new Vector3(0.3f, -0.4f, -0.1f); // x mirrored per side, chest-yaw space
+        /// <summary>Extra yaw added to the body facing; set 180 if the imported rig faces backward.</summary>
         public float BodyYawOffsetDegrees;                                // set 180 if the body faces backward
         // Hand twist: auto-calibrated at runtime so the wrist follows the controller without a
         // hand-authored offset (we capture the hand's orientation relative to the controller once).
+        /// <summary>When true, the hand bone's orientation is locked to the controller so the wrist twists with
+        /// the player's real wrist (using an auto-captured offset); when false the hand just follows the forearm.</summary>
         public bool MatchHandToController = true;
         // Fingers curl from rest toward a closed fist as the grip trigger is squeezed. The curl axis
         // is the per-finger-bone local bend axis — Mixamo's varies, so it is tunable if curl looks off.
+        /// <summary>Maximum degrees each finger joint curls toward a fist at full grip squeeze.</summary>
         [Range(0f, 130f)] public float FingerCurlAngle = 70f;
         // Legacy fallback axis -- unused by the current knuckle-line curl (kept for Inspector compat).
+        /// <summary>Legacy per-bone curl axis, unused by the current knuckle-line curl; kept for Inspector compatibility.</summary>
         public Vector3 FingerCurlAxis = new Vector3(0f, 0f, 1f);
         // Flip to -1 if the fingers curl backward (away from the palm) on a given FBX.
+        /// <summary>Sign of the finger curl direction; flip to -1 if fingers curl away from the palm on a given FBX.</summary>
         public float FingerCurlSign = -1f;
 
+        /// <summary>The OVR camera rig this arm rig reads head and controller poses from.</summary>
         private OVRCameraRig m_rig;
+        /// <summary>Root transform of the instantiated arms model, moved each frame to place the body.</summary>
         private Transform m_modelRoot;
+        /// <summary>The chest bone (mixamorig:Spine2 or a fallback) used as the body anchor point.</summary>
         private Transform m_chest;
+        /// <summary>Chest position in model-root local space, cached so the root can be positioned to land the chest at its target.</summary>
         private Vector3 m_chestLocalInRoot;
 
+        /// <summary>Upper-arm bones per side (0 = left, 1 = right).</summary>
         private readonly Transform[] m_upperArm = new Transform[2];
+        /// <summary>Forearm bones per side (0 = left, 1 = right).</summary>
         private readonly Transform[] m_foreArm = new Transform[2];
+        /// <summary>Hand bones per side (0 = left, 1 = right).</summary>
         private readonly Transform[] m_hand = new Transform[2];
+        /// <summary>Recorded upper-arm (shoulder-to-elbow) bone length per side, used by the two-bone IK solver.</summary>
         private readonly float[] m_upperLen = new float[2];
+        /// <summary>Recorded forearm (elbow-to-wrist) bone length per side, used by the two-bone IK solver.</summary>
         private readonly float[] m_foreLen = new float[2];
+        /// <summary>Rest-pose local position of each upper-arm bone, restored every frame to undo the shoulder-stretch slide.</summary>
         private readonly Vector3[] m_upperRestLocalPos = new Vector3[2];
+        /// <summary>Rest-pose local direction from each upper-arm bone toward its child, so aiming is axis-agnostic.</summary>
         private readonly Vector3[] m_upperRestAxis = new Vector3[2];
+        /// <summary>Rest-pose local direction from each forearm bone toward its child, so aiming is axis-agnostic.</summary>
         private readonly Vector3[] m_foreRestAxis = new Vector3[2];
+        /// <summary>Captured rotation offset from controller to hand bone, applied so the wrist tracks the controller.</summary>
         private readonly Quaternion[] m_handOffset = new Quaternion[2];
+        /// <summary>Whether each hand's twist offset has been captured yet; cleared to force a recalibration.</summary>
         private readonly bool[] m_handCalibrated = new bool[2];
+        /// <summary>All curlable finger joints under each hand bone.</summary>
         private readonly Transform[][] m_fingerBones = new Transform[2][];
+        /// <summary>Rest-pose local rotation of each finger joint, the base pose the curl rotates away from.</summary>
         private readonly Quaternion[][] m_fingerRest = new Quaternion[2][];
+        /// <summary>Per-finger-joint local hinge axis (the knuckle line) about which the joint curls; zero for joints left uncurled.</summary>
         private readonly Vector3[][] m_fingerBendAxis = new Vector3[2][];
+        /// <summary>True once bones are found and the rig is set up; the solver no-ops until then.</summary>
         private bool m_ready;
         // One-shot recalibration shortly after init so the wrist twist offset is captured from a settled,
         // tracked pose instead of frame 1 (controllers can read a bad orientation before tracking warms up).
+        /// <summary>Time at which the one-shot post-init hand recalibration fires; -1 once consumed or disabled.</summary>
         private float m_settleRecalibrateAt = -1f;
 
+        /// <summary>True when the rig has found its bones and is actively solving arm poses.</summary>
         public bool IsReady => m_ready;
 
         // Re-capture the wrist twist offset on the next solve. Call when a grab changes the arm pose
         // so the hand stops twisting relative to the forearm (the offset is otherwise latched once).
+        /// <summary>Forces both hands to re-capture their controller-to-wrist twist offset on the next solve;
+        /// called after a grab changes the arm pose so the hand stops twisting relative to the forearm.</summary>
         public void RecalibrateHands()
         {
             m_handCalibrated[0] = false;
@@ -77,8 +121,13 @@ namespace SimJam.BarrelSimulator
         }
 
         // The hand bone transform (0 = left, 1 = right) for fingertip-based interactions; may be null.
+        /// <summary>Returns the hand bone transform for the requested side (for fingertip-based interactions);
+        /// may be null if the rig failed to find its bones.</summary>
         public Transform GetHandBone(bool left) => m_hand[left ? 0 : 1];
 
+        /// <summary>Binds this rig to the OVR camera rig and an instantiated arms model: locates the chest and
+        /// arm/finger bones, auto-scales the model to the target reach, and records rest lengths/axes so the
+        /// per-frame IK solver can run. Sets IsReady on success.</summary>
         public void Initialize(OVRCameraRig rig, GameObject armsInstance)
         {
             m_rig = rig;
@@ -190,6 +239,8 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Per-frame driver (after the OVR rig updates): re-anchors the body to the head, then solves
+        /// each connected arm so the wrist reaches its controller. Runs in LateUpdate parent-before-child.</summary>
         private void LateUpdate()
         {
             if (!m_ready || m_rig == null || m_rig.centerEyeAnchor == null)
@@ -234,6 +285,9 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Analytic two-bone IK for one arm: optionally slides the shoulder toward the controller when
+        /// out of reach, solves the elbow via the law of cosines using the pole hint, aims the upper arm and
+        /// forearm along their rest axes, matches the wrist to the controller, and curls the fingers.</summary>
         private void SolveArm(int i, float side, Transform anchor, Quaternion chestYaw)
         {
             // Undo any previous-frame shoulder-stretch slide FIRST: body placement moves the model root
@@ -313,6 +367,8 @@ namespace SimJam.BarrelSimulator
 
         // Curls every finger joint from its rest pose toward a fist, proportional to the grip trigger,
         // so squeezing to grab visibly closes the hand.
+        /// <summary>Curls the given hand's finger joints from rest toward a fist in proportion to the grip
+        /// trigger, hinging each about its knuckle-line axis; uncurlable joints (thumb, fingertips) stay at rest.</summary>
         private void CurlFingers(int i)
         {
             var bones = m_fingerBones[i];
@@ -345,6 +401,8 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Recursively gathers every descendant transform of the given parent (used to collect all
+        /// finger joints under a hand bone).</summary>
         private static void CollectDescendants(Transform parent, List<Transform> into)
         {
             for (var i = 0; i < parent.childCount; i++)
@@ -355,6 +413,8 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Rotates a bone so its recorded rest axis points along the desired world direction, without
+        /// assuming which local axis runs down the bone; no-ops if the direction is degenerate.</summary>
         private static void AimBoneAxis(Transform bone, Vector3 localAxis, Vector3 desiredWorldDir)
         {
             if (desiredWorldDir.sqrMagnitude < 1e-10f)
@@ -366,6 +426,8 @@ namespace SimJam.BarrelSimulator
             bone.rotation = Quaternion.FromToRotation(currentWorldDir, desiredWorldDir.normalized) * bone.rotation;
         }
 
+        /// <summary>Depth-first search for a descendant transform by exact name (used to locate mixamorig bones);
+        /// returns null if not found.</summary>
         private static Transform FindDeep(Transform root, string boneName)
         {
             if (root.name == boneName)

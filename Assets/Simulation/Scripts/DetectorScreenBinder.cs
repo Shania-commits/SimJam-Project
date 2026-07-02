@@ -9,15 +9,31 @@ namespace SimJam.BarrelSimulator
     // the radiation level and the slider fills as the player gets closer to / better aimed at the
     // source. This is the ONLY file that depends on TextMesh Pro / uGUI, which keeps RadiationDetector
     // UI-agnostic; it is added at runtime only when a detector prefab is used.
+    /// <summary>
+    /// Runtime bridge that mirrors a <see cref="RadiationDetector"/>'s live reading onto the
+    /// identiFINDER's on-screen widgets: a TextMeshPro count-rate/dose label and a UI Slider "warmth"
+    /// bar that fills as the player closes in on the hidden radioactive barrel. Isolates all TMP/uGUI
+    /// dependencies here so the detector model stays UI-agnostic; attached at runtime only when a
+    /// detector prefab supplies a screen.
+    /// </summary>
     public class DetectorScreenBinder : MonoBehaviour
     {
+        /// <summary>Seconds between screen refreshes (10 Hz), matching the detector's sampling cadence.</summary>
         private const float TickInterval = 0.1f;
 
+        /// <summary>The detector whose smoothed CPS reading drives the screen.</summary>
         private RadiationDetector m_detector;
+        /// <summary>Cached TextMeshPro label showing the numeric count rate and dose.</summary>
         private TMP_Text m_text;
+        /// <summary>Cached UI slider used as the log-scaled proximity/"warmth" bar.</summary>
         private Slider m_slider;
+        /// <summary>Accumulates frame time so the screen updates only once per <see cref="TickInterval"/>.</summary>
         private float m_tickTimer;
 
+        /// <summary>
+        /// Wires this binder to a detector and locates the TMP label + Slider inside the given
+        /// identiFINDER instance, then does an immediate refresh so the screen shows a value right away.
+        /// </summary>
         // screenSource is the instantiated identiFINDER (the prefab instance) that owns the screen.
         public void Bind(RadiationDetector detector, GameObject screenSource)
         {
@@ -31,6 +47,7 @@ namespace SimJam.BarrelSimulator
             Refresh();
         }
 
+        /// <summary>Per-frame tick that throttles refreshes to <see cref="TickInterval"/> once a detector is bound.</summary>
         private void Update()
         {
             if (m_detector == null)
@@ -48,6 +65,11 @@ namespace SimJam.BarrelSimulator
             Refresh();
         }
 
+        /// <summary>
+        /// Reads the detector's smoothed CPS and pushes it to the screen: the label shows the count
+        /// rate plus a converted dose in µSv/h, and the slider is set to a log-scaled 0..1 level that
+        /// grows as the reading climbs toward the unshielded source.
+        /// </summary>
         private void Refresh()
         {
             if (m_detector == null)

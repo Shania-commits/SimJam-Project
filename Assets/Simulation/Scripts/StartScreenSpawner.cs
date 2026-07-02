@@ -19,32 +19,54 @@ namespace SimJam
     public class StartScreenSpawner : MonoBehaviour
     {
         [Header("Content")]
+        /// <summary>Heading shown at the top of the title panel.</summary>
         [SerializeField] private string m_titleText = "Radiation Detection Training";
+        /// <summary>Scene loaded once the player picks a movement style and confirms (defaults to the tutorial).</summary>
         [SerializeField] private string m_sceneToLoad = "TutorialRoom";
 
         [Header("Shania UI art (assign BackgroundUI_Wide + Button_White)")]
+        /// <summary>Optional artwork for the panel background; falls back to a flat dark fill when unset.</summary>
         [SerializeField] private Sprite m_backgroundSprite;
+        /// <summary>Optional artwork for the button faces; falls back to solid tint colours when unset.</summary>
         [SerializeField] private Sprite m_buttonSprite;
 
         [Header("Placement")]
+        /// <summary>Design-space (pixel) dimensions of the world-space canvas before <see cref="m_worldSpaceScale"/> is applied.</summary>
         [SerializeField] private Vector2 m_panelSize = new Vector2(960f, 540f);
+        /// <summary>World units per canvas pixel — shrinks the pixel-sized UI down to a readable real-world size.</summary>
         [SerializeField, Min(0.0005f)] private float m_worldSpaceScale = 0.00225f;
+        /// <summary>Eye-height (metres) at which the menu is mounted on the front wall.</summary>
         [SerializeField] private float m_wallPanelHeight = 1.5f; // centre height of the wall-mounted menu
+        /// <summary>Duration of the fade-to-black transition before the next scene loads.</summary>
         [SerializeField, Min(0f)] private float m_transitionFadeSeconds = 0.6f;
 
         [Header("Narration")]
+        /// <summary>Voiceover that prompts the player to choose a movement style; plays once when the screen loads.</summary>
         [SerializeField] private AudioClip m_startNarrationClip; // "choose your movement" voiceover (auto-plays on load)
+        /// <summary>Whether the narration clip auto-plays on load.</summary>
         [SerializeField] private bool m_playNarrationOnStart = true;
 
+        /// <summary>The world-space canvas hosting the title, instructions, and buttons.</summary>
         private Canvas m_canvas;
+        /// <summary>True once a scene load has been kicked off, so it can't be triggered twice.</summary>
         private bool m_loading;
+        /// <summary>True once the panel has been positioned on the wall (positioning is one-shot).</summary>
         private bool m_panelAnchored;
+        /// <summary>The movement style the player has picked; gates the Continue action until set.</summary>
         private MovementMode m_selectedMode = MovementMode.Unset;
+        /// <summary>Button that selects smooth (walk) locomotion.</summary>
         private Button m_locomotionButton;
+        /// <summary>Button that selects teleport locomotion.</summary>
         private Button m_teleportButton;
+        /// <summary>Button that confirms the choice and starts the game; disabled until a mode is picked.</summary>
         private Button m_continueButton;
+        /// <summary>2D audio source used to play the start-screen narration.</summary>
         private AudioSource m_narrationAudioSource;
 
+        /// <summary>
+        /// Builds the play room and title UI, ensures a UI pointer and free-roam locomotion helper exist,
+        /// and plays the start narration.
+        /// </summary>
         private void Start()
         {
             BuildPlayRoom();
@@ -62,8 +84,10 @@ namespace SimJam
             PlayStartNarration();
         }
 
-        // Plays the start-screen voiceover once on load ("choose your movement"). 2D so it is audible
-        // wherever the player is standing. Safe no-op until the clip is assigned.
+        /// <summary>
+        /// Plays the start-screen voiceover once on load. Safe no-op until the clip is assigned or when
+        /// narration is disabled.
+        /// </summary>
         private void PlayStartNarration()
         {
             if (!m_playNarrationOnStart || m_startNarrationClip == null)
@@ -76,6 +100,7 @@ namespace SimJam
             m_narrationAudioSource.Play();
         }
 
+        /// <summary>Lazily creates/configures the 2D <see cref="AudioSource"/> used for narration.</summary>
         private void EnsureNarrationAudioSource()
         {
             if (m_narrationAudioSource != null)
@@ -94,11 +119,16 @@ namespace SimJam
             m_narrationAudioSource.spatialBlend = 0f; // 2D — audible regardless of head position
         }
 
+        /// <summary>Keeps the panel anchored on the wall (runs the one-shot placement if not yet done).</summary>
         private void LateUpdate()
         {
             UpdatePanelPose();
         }
 
+        /// <summary>
+        /// Per-frame input handling: editor keyboard fallbacks for mode selection, plus the
+        /// keyboard/controller start trigger once a mode has been chosen.
+        /// </summary>
         private void Update()
         {
 #if UNITY_EDITOR && ENABLE_INPUT_SYSTEM
@@ -118,6 +148,10 @@ namespace SimJam
             }
         }
 
+        /// <summary>
+        /// Editor-only desktop fallback: returns true when Space/Enter is pressed so the title screen can
+        /// be tested flat without a VR controller. Always false in a build.
+        /// </summary>
         // Editor desktop fallback: Space/Enter starts, so the title screen can be tested flat without
         // a VR controller (the world-space button isn't mouse-clickable in flat Play mode).
         private static bool WasStartKeyPressed()
@@ -132,6 +166,10 @@ namespace SimJam
 #endif
         }
 
+        /// <summary>
+        /// Saves the chosen movement preference and begins the fade-out-and-load transition. Ignored if
+        /// already loading, if no mode is selected, or if no target scene is configured.
+        /// </summary>
         public void StartGame()
         {
             if (m_loading || m_selectedMode == MovementMode.Unset || string.IsNullOrWhiteSpace(m_sceneToLoad))
@@ -144,6 +182,10 @@ namespace SimJam
             StartCoroutine(FadeOutAndLoad());
         }
 
+        /// <summary>
+        /// Coroutine that fades the HMD view to black via <see cref="OVRScreenFade"/> (adding one to the
+        /// main camera if needed) and then loads the target scene.
+        /// </summary>
         private IEnumerator FadeOutAndLoad()
         {
             // VR-correct fade: OVRScreenFade builds a world-space quad on the camera so it renders
@@ -166,6 +208,10 @@ namespace SimJam
             SceneManager.LoadScene(m_sceneToLoad);
         }
 
+        /// <summary>
+        /// Constructs the world-space title panel: background, title, instructions, the two movement-mode
+        /// buttons, and a gated Continue button, then anchors the panel to the wall.
+        /// </summary>
         private void BuildUi()
         {
             var canvasObject = new GameObject("Start Screen Canvas");
@@ -211,6 +257,10 @@ namespace SimJam
             UpdatePanelPose();
         }
 
+        /// <summary>
+        /// One-shot placement of the menu flat against the room's front (+Z) wall at eye height, facing the
+        /// player. Fixed (no billboard/follow) so it can never sink into the floor.
+        /// </summary>
         private void UpdatePanelPose()
         {
             if (m_canvas == null || m_panelAnchored)
@@ -228,6 +278,10 @@ namespace SimJam
             m_panelAnchored = true;
         }
 
+        /// <summary>
+        /// Records the player's movement choice, enables the Continue button, and highlights the picked
+        /// mode button.
+        /// </summary>
         private void SelectMode(MovementMode mode)
         {
             m_selectedMode = mode;
@@ -240,6 +294,7 @@ namespace SimJam
             TintModeButton(m_teleportButton, mode == MovementMode.Teleport);
         }
 
+        /// <summary>Tints a mode button green when it is the selected mode, otherwise blue.</summary>
         private static void TintModeButton(Button button, bool selected)
         {
             if (button == null)
@@ -253,6 +308,11 @@ namespace SimJam
             button.colors = colors;
         }
 
+        /// <summary>
+        /// Builds the small 8x8 m room (floor, four walls, a directional light) that the player walks or
+        /// teleports around in to try out both movement styles. Constructed at world origin to match the
+        /// rig and locomotion helper.
+        /// </summary>
         private void BuildPlayRoom()
         {
             var roomRoot = new GameObject("Start Play Room");
@@ -286,6 +346,7 @@ namespace SimJam
             }
         }
 
+        /// <summary>Creates a low-gloss Standard-shader material of the given colour for room surfaces.</summary>
         private static Material CreateRoomMaterial(string materialName, Color color)
         {
             var material = new Material(Shader.Find("Standard")) { name = materialName, color = color };
@@ -293,6 +354,7 @@ namespace SimJam
             return material;
         }
 
+        /// <summary>Spawns a scaled cube primitive (floor/wall) under the room root with the given material.</summary>
         private static void CreateRoomCube(Transform parent, string objectName, Vector3 localPosition, Vector3 localScale, Material material)
         {
             var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -303,6 +365,7 @@ namespace SimJam
             cube.GetComponent<MeshRenderer>().sharedMaterial = material;
         }
 
+        /// <summary>Helper that creates a child <see cref="RectTransform"/> with the given anchors, position, and size.</summary>
         private static RectTransform CreateRect(Transform parent, string objectName, Vector2 anchorMin, Vector2 anchorMax, Vector2 anchoredPosition, Vector2 size)
         {
             var rectObject = new GameObject(objectName);
@@ -316,6 +379,10 @@ namespace SimJam
             return rect;
         }
 
+        /// <summary>
+        /// Helper that creates a centered, auto-sizing white <see cref="TextMeshProUGUI"/> label inside a new
+        /// rect so long strings shrink to fit rather than overflowing.
+        /// </summary>
         private static TMP_Text CreateText(Transform parent, string objectName, Vector2 anchorMin, Vector2 anchorMax, Vector2 anchoredPosition, Vector2 size, float fontSize)
         {
             var rect = CreateRect(parent, objectName, anchorMin, anchorMax, anchoredPosition, size);
@@ -332,6 +399,10 @@ namespace SimJam
             return text;
         }
 
+        /// <summary>
+        /// Helper that creates a clickable <see cref="Button"/> with a sprite/tinted background and a
+        /// centered auto-sizing label; used for the mode and Continue buttons.
+        /// </summary>
         private Button CreateButton(Transform parent, string objectName, string label, Vector2 anchorMin, Vector2 anchorMax, Vector2 anchoredPosition, Vector2 size, float maxFontSize)
         {
             var rect = CreateRect(parent, objectName, anchorMin, anchorMax, anchoredPosition, size);

@@ -51,6 +51,11 @@ namespace SimJam
             Object.Destroy(go, 1.2f);
         }
 
+        /// <summary>
+        /// Build a stripping-safe, white particle material for the burst. Uses the Always-Included
+        /// Sprites/Default shader so it renders correctly (not magenta) on a stripped Quest build; the
+        /// per-particle tint is applied via start color, so the material itself stays white.
+        /// </summary>
         private static Material CreateParticleMaterial(Color color)
         {
             // Sprites/Default is in the project's Always Included Shaders, so it survives on-device

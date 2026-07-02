@@ -12,88 +12,155 @@ using UnityEngine.InputSystem;
 
 namespace SimJam.Tutorial
 {
+    /// <summary>
+    /// Drives the guided TutorialRoom: owns the ordered list of tutorial steps, builds a world-space
+    /// caption panel (title / body / step counter / Continue-Previous-Pause buttons) at runtime,
+    /// advances/rewinds between steps, gates the interactive steps until the player completes them,
+    /// plays per-step narration, and on the final step hands off to the main mission scene with a fade.
+    /// Interactive controllers (walk-to-marker, teleport, grab-and-read) call CompleteStepIfCurrent to
+    /// unlock a gated step.
+    /// </summary>
     public class TutorialManager : MonoBehaviour
     {
+        /// <summary>
+        /// One screen of the tutorial: its title/caption text, optional background art and narration
+        /// clip, the label shown on the advance button, whether the player may go back or pause here,
+        /// whether continuing is gated on an interactive completion, and events fired on start/complete.
+        /// </summary>
         [Serializable]
         public class TutorialStep
         {
+            /// <summary>Heading shown at the top of the caption panel for this step.</summary>
             public string title;
+            /// <summary>Body text describing what the player should read or do on this step.</summary>
             [TextArea(3, 8)] public string caption;
+            /// <summary>Optional full-panel background image; falls back to the default caption sprite/color.</summary>
             public Sprite backgroundImage;
+            /// <summary>Optional voiceover clip played when this step starts.</summary>
             public AudioClip narrationClip;
+            /// <summary>Text on the advance button (e.g. "Continue", "Begin Mission").</summary>
             public string nextButtonLabel = "Continue";
+            /// <summary>Whether the Previous button is allowed on this step.</summary>
             public bool canGoBack = true;
+            /// <summary>Whether the player may pause while on this step.</summary>
             public bool canPause = true;
+            /// <summary>If true, the player must complete an interactive task before Continue unlocks.</summary>
             public bool requireCompletionToContinue;
+            /// <summary>Invoked when this step becomes the current step (used to arm interactive tasks).</summary>
             public UnityEvent onStepStarted;
+            /// <summary>Invoked when this step is completed or advanced past.</summary>
             public UnityEvent onStepCompleted;
         }
 
         [Header("Tutorial screens")]
+        /// <summary>Ordered list of tutorial steps; if left empty a default set is added at Awake.</summary>
         [SerializeField] private List<TutorialStep> m_steps = new();
+        /// <summary>Step index to open on first show (clamped to the valid range).</summary>
         [SerializeField] private int m_startingStepIndex;
 
         [Header("Optional UI references")]
+        /// <summary>Canvas hosting the caption panel; created automatically if not assigned.</summary>
         [SerializeField] private Canvas m_canvas;
+        /// <summary>Root rect of the caption panel that holds all the child widgets.</summary>
         [SerializeField] private RectTransform m_panelRoot;
+        /// <summary>Full-panel background image swapped per step.</summary>
         [SerializeField] private Image m_backgroundImage;
+        /// <summary>Text element showing the current step's title.</summary>
         [SerializeField] private TMP_Text m_titleText;
+        /// <summary>Text element showing the current step's body caption.</summary>
         [SerializeField] private TMP_Text m_captionText;
+        /// <summary>Text element showing "position/total" over the visible (non-skipped) steps.</summary>
         [SerializeField] private TMP_Text m_stepCounterText;
+        /// <summary>Label on the advance button, updated to each step's nextButtonLabel.</summary>
         [SerializeField] private TMP_Text m_nextButtonLabelText;
+        /// <summary>Overlay panel shown while paused.</summary>
         [SerializeField] private GameObject m_pausePanel;
+        /// <summary>Button that returns to the previous step.</summary>
         [SerializeField] private Button m_backButton;
+        /// <summary>Button that advances to the next step (or begins the mission on the last step).</summary>
         [SerializeField] private Button m_nextButton;
+        /// <summary>Button that toggles the pause overlay.</summary>
         [SerializeField] private Button m_pauseButton;
+        /// <summary>Button on the pause overlay that resumes the tutorial.</summary>
         [SerializeField] private Button m_resumeButton;
 
         [Header("UI art")]
+        /// <summary>Fallback background sprite used when a step has no backgroundImage.</summary>
         [SerializeField] private Sprite m_defaultCaptionBackgroundSprite;
+        /// <summary>Sprite applied to runtime-created buttons; drives their tint scheme when null.</summary>
         [SerializeField] private Sprite m_buttonSprite;
 
         [Header("Narration")]
+        /// <summary>Audio source used for per-step voiceover; auto-created if missing.</summary>
         [SerializeField] private AudioSource m_narrationAudioSource;
+        /// <summary>Whether to start a step's narration clip automatically when the step opens.</summary>
         [SerializeField] private bool m_playNarrationOnStepStart = true;
 
         [Header("VR panel placement")]
+        /// <summary>If true, build the default caption UI at runtime when references are missing.</summary>
         [SerializeField] private bool m_createDefaultUiIfMissing = true;
+        /// <summary>Use a world-space canvas (VR) instead of a screen-space overlay (flat desktop).</summary>
         [SerializeField] private bool m_useWorldSpaceCanvas;
+        /// <summary>If true, place the world panel relative to the camera on first show.</summary>
         [SerializeField] private bool m_keepPanelInFrontOfCamera = true;
+        /// <summary>Unused legacy follow distance for a head-locked panel (kept for inspector data).</summary>
         [SerializeField, Min(0.5f)] private float m_panelDistance = 2.2f;
         // Distance out to anchor the panel as a flat screen on the wall the player faces at spawn.
+        /// <summary>Distance out to anchor the panel as a flat screen on the wall the player faces at spawn.</summary>
         [SerializeField, Min(0.5f)] private float m_panelWallDistance = 3.2f;
+        /// <summary>Vertical offset applied to the anchored world panel height.</summary>
         [SerializeField] private float m_panelVerticalOffset;
+        /// <summary>Pixel size of the panel rect (also the canvas reference size).</summary>
         [SerializeField] private Vector2 m_panelSize = new Vector2(960f, 540f);
+        /// <summary>Local scale applied to the world-space canvas to shrink pixels to metres.</summary>
         [SerializeField, Min(0.0005f)] private float m_worldSpaceScale = 0.00225f;
 
         [Header("Runtime controls")]
+        /// <summary>If true, pausing sets Time.timeScale to 0 (and restores it on resume).</summary>
         [SerializeField] private bool m_pauseWithTimeScale = true;
 
         [Header("Mission hand-off")]
         // On the final step ("Begin Mission"), load the main game scene. The scene must be in
         // Build Settings (File > Build Settings) for LoadScene-by-name to work.
+        /// <summary>Whether finishing the tutorial loads the mission scene (vs. just ending).</summary>
         [SerializeField] private bool m_loadMissionSceneOnFinish = true;
+        /// <summary>Name of the main game scene to load when the tutorial finishes.</summary>
         [SerializeField] private string m_missionSceneName = "RadiationLabRoom";
+        /// <summary>Duration of the fade-to-black before the mission scene loads.</summary>
         [SerializeField, Min(0f)] private float m_transitionFadeSeconds = 0.6f;
 
+        /// <summary>Index of the step currently being shown.</summary>
         private int m_currentStepIndex;
         // Steps hidden for the chosen movement mode (the unused locomotion/teleport slide). They stay
         // in the list so every other step index is unaffected; navigation + the counter skip over them.
+        /// <summary>Indices of steps hidden for the chosen movement mode; navigation and the counter skip them.</summary>
         private readonly HashSet<int> m_skippedSteps = new();
+        /// <summary>Whether the current gated step's interactive task has been completed.</summary>
         private bool m_currentStepComplete;
+        /// <summary>Whether the tutorial is currently paused.</summary>
         private bool m_isPaused;
+        /// <summary>Time.timeScale captured on pause so it can be restored on resume.</summary>
         private float m_timeScaleBeforePause = 1f;
+        /// <summary>Transform (usually the main camera) used to place the world panel on first show.</summary>
         private Transform m_panelFollowTarget;
+        /// <summary>Set once the world panel has been anchored so it stops re-positioning.</summary>
         private bool m_panelAnchored;
 
+        /// <summary>Index of the step currently displayed.</summary>
         public int CurrentStepIndex => m_currentStepIndex;
+        /// <summary>Whether the tutorial is paused.</summary>
         public bool IsPaused => m_isPaused;
 
+        /// <summary>Returns true if the given step index is the one currently being shown.</summary>
         public bool IsCurrentStep(int stepIndex)
         {
             return m_currentStepIndex == stepIndex;
         }
 
+        /// <summary>
+        /// Seeds default steps if none authored, builds the default UI, wires buttons, clamps to the
+        /// starting step, shows it, and ensures a VrUiPointer exists so the laser can click the panel.
+        /// </summary>
         private void Awake()
         {
             if (m_steps.Count == 0)
@@ -112,6 +179,7 @@ namespace SimJam.Tutorial
             EnsureUiPointer();
         }
 
+        /// <summary>Adds the controller laser-pointer clicker if one is not already in the scene.</summary>
         private void EnsureUiPointer()
         {
             if (FindAnyObjectByType<VrUiPointer>() == null)
@@ -120,6 +188,7 @@ namespace SimJam.Tutorial
             }
         }
 
+        /// <summary>Keeps the world-space panel positioned (anchored once) after transforms update.</summary>
         private void LateUpdate()
         {
             if (m_useWorldSpaceCanvas && m_keepPanelInFrontOfCamera)
@@ -128,6 +197,7 @@ namespace SimJam.Tutorial
             }
         }
 
+        /// <summary>Handles pause toggling and the editor keyboard fallbacks for advancing/going back.</summary>
         private void Update()
         {
             if (WasPausePressed() && CurrentStepAllowsPause())
@@ -151,6 +221,10 @@ namespace SimJam.Tutorial
             }
         }
 
+        /// <summary>
+        /// Advances to the next visible step. Blocks while a gated step is incomplete, hands off to the
+        /// mission when already on the last step, and skips any steps hidden for the movement mode.
+        /// </summary>
         public void GoToNextStep()
         {
             if (m_steps.Count == 0)
@@ -208,6 +282,10 @@ namespace SimJam.Tutorial
             StartCoroutine(FadeOutAndLoadMission());
         }
 
+        /// <summary>
+        /// Coroutine that fades the HMD view to black using OVRScreenFade (VR-correct, world-space quad
+        /// on the camera) and then loads the mission scene.
+        /// </summary>
         private System.Collections.IEnumerator FadeOutAndLoadMission()
         {
             // VR-correct fade: OVRScreenFade builds a world-space quad on the camera, so it renders
@@ -231,6 +309,10 @@ namespace SimJam.Tutorial
             SceneManager.LoadScene(m_missionSceneName);
         }
 
+        /// <summary>
+        /// Returns to the previous visible step if the current step allows going back, skipping any
+        /// steps hidden for the movement mode.
+        /// </summary>
         public void GoToPreviousStep()
         {
             if (m_steps.Count == 0 || m_currentStepIndex <= 0 || !m_steps[m_currentStepIndex].canGoBack)
@@ -247,6 +329,10 @@ namespace SimJam.Tutorial
             ShowCurrentStep();
         }
 
+        /// <summary>
+        /// Marks the current step complete (unlocking its gated Continue button), fires its completed
+        /// event, and refreshes the control states.
+        /// </summary>
         public void CompleteCurrentStep()
         {
             if (m_steps.Count == 0)
@@ -259,6 +345,10 @@ namespace SimJam.Tutorial
             RefreshControls();
         }
 
+        /// <summary>
+        /// Completes the given step only if it is the one currently shown. Called by the interactive
+        /// tutorial controllers when the player finishes a gated task (walk, teleport, grab-and-read).
+        /// </summary>
         public void CompleteStepIfCurrent(int stepIndex)
         {
             if (m_currentStepIndex == stepIndex)
@@ -267,6 +357,10 @@ namespace SimJam.Tutorial
             }
         }
 
+        /// <summary>
+        /// Pauses the tutorial (if the current step allows it): freezes time, pauses narration, and
+        /// shows the pause overlay.
+        /// </summary>
         public void PauseTutorial()
         {
             if (m_isPaused || !CurrentStepAllowsPause())
@@ -289,6 +383,7 @@ namespace SimJam.Tutorial
             RefreshControls();
         }
 
+        /// <summary>Resumes from pause: restores time, un-pauses narration, and hides the pause overlay.</summary>
         public void ResumeTutorial()
         {
             if (!m_isPaused)
@@ -310,6 +405,7 @@ namespace SimJam.Tutorial
             RefreshControls();
         }
 
+        /// <summary>Toggles between paused and resumed.</summary>
         public void TogglePause()
         {
             if (m_isPaused)
@@ -322,6 +418,7 @@ namespace SimJam.Tutorial
             }
         }
 
+        /// <summary>Resumes and jumps back to the first step.</summary>
         public void RestartTutorial()
         {
             ResumeTutorial();
@@ -331,6 +428,10 @@ namespace SimJam.Tutorial
 
         // Hide a step for the chosen movement mode (the unused locomotion/teleport slide). The step
         // stays in the list so every other step index is unaffected; navigation + the counter skip it.
+        /// <summary>
+        /// Marks a step as skipped (hidden) or visible for the chosen movement mode without altering the
+        /// list, then refreshes the step counter. Skipped steps are jumped over by navigation.
+        /// </summary>
         public void SetStepSkipped(int stepIndex, bool skipped)
         {
             if (stepIndex < 0)
@@ -350,11 +451,13 @@ namespace SimJam.Tutorial
             RefreshStepCounter();
         }
 
+        /// <summary>Number of steps counted in the "x/total" readout (total minus skipped steps).</summary>
         private int VisibleStepCount()
         {
             return Mathf.Max(0, m_steps.Count - m_skippedSteps.Count);
         }
 
+        /// <summary>1-based position of a step among the visible (non-skipped) steps, for the counter.</summary>
         private int VisiblePosition(int index)
         {
             var position = 0;
@@ -369,6 +472,7 @@ namespace SimJam.Tutorial
             return position;
         }
 
+        /// <summary>Updates the "position/total" counter text for the current step.</summary>
         private void RefreshStepCounter()
         {
             if (m_steps.Count == 0)
@@ -379,6 +483,10 @@ namespace SimJam.Tutorial
             SetText(m_stepCounterText, $"{VisiblePosition(m_currentStepIndex)}/{VisibleStepCount()}");
         }
 
+        /// <summary>
+        /// Renders the current step: sets title/caption/counter/button label, applies the background
+        /// sprite (or default), fires onStepStarted, plays narration, and refreshes control states.
+        /// </summary>
         private void ShowCurrentStep()
         {
             m_currentStepComplete = false;
@@ -414,6 +522,7 @@ namespace SimJam.Tutorial
             RefreshControls();
         }
 
+        /// <summary>Plays the given step's narration clip (if enabled and a clip exists).</summary>
         private void PlayNarration(TutorialStep step)
         {
             if (!m_playNarrationOnStepStart)
@@ -435,6 +544,7 @@ namespace SimJam.Tutorial
             }
         }
 
+        /// <summary>Stops any playing narration and clears the current clip.</summary>
         private void StopNarration()
         {
             if (m_narrationAudioSource == null)
@@ -446,6 +556,7 @@ namespace SimJam.Tutorial
             m_narrationAudioSource.clip = null;
         }
 
+        /// <summary>Lazily finds or adds a 2D AudioSource used for the tutorial voiceover.</summary>
         private void EnsureNarrationAudioSource()
         {
             if (m_narrationAudioSource != null)
@@ -464,6 +575,10 @@ namespace SimJam.Tutorial
             m_narrationAudioSource.spatialBlend = 0f; // 2D so voiceover is heard from anywhere in the room
         }
 
+        /// <summary>
+        /// Syncs the pause overlay and the Back/Next/Pause button visibility and interactability to the
+        /// current step, pause state, and gated-completion state.
+        /// </summary>
         private void RefreshControls()
         {
             if (m_pausePanel != null)
@@ -494,6 +609,9 @@ namespace SimJam.Tutorial
             }
         }
 
+        /// <summary>
+        /// Re-anchors the Next button: bottom-right when a Back button is present, centered otherwise.
+        /// </summary>
         private void SetNextButtonPlacement(bool hasBackButton)
         {
             if (m_nextButton == null)
@@ -513,11 +631,13 @@ namespace SimJam.Tutorial
             rectTransform.anchoredPosition = hasBackButton ? new Vector2(-150f, 74f) : new Vector2(0f, 74f);
         }
 
+        /// <summary>Whether the current step permits pausing (true when there are no steps).</summary>
         private bool CurrentStepAllowsPause()
         {
             return m_steps.Count == 0 || m_steps[m_currentStepIndex].canPause;
         }
 
+        /// <summary>Null-safe helper that assigns text to a TMP element if it exists.</summary>
         private static void SetText(TMP_Text text, string value)
         {
             if (text != null)
@@ -526,6 +646,7 @@ namespace SimJam.Tutorial
             }
         }
 
+        /// <summary>Hooks the Back/Next/Pause/Resume buttons to their handlers (removed first to avoid dupes).</summary>
         private void WireButtons()
         {
             if (m_backButton != null)
@@ -557,6 +678,7 @@ namespace SimJam.Tutorial
             }
         }
 
+        /// <summary>True the frame Escape is pressed (used to toggle pause).</summary>
         private bool WasPausePressed()
         {
 #if ENABLE_INPUT_SYSTEM
@@ -569,6 +691,7 @@ namespace SimJam.Tutorial
         // Editor desktop fallback so the tutorial can be driven without a VR controller: Space/Enter
         // advances, Backspace goes back. The world-space VR panel isn't mouse-clickable in flat Play
         // mode and OVRInput has no controller there, so these make flat desktop testing possible.
+        /// <summary>Editor-only: true the frame Space/Enter is pressed, to advance a step on desktop.</summary>
         private static bool WasAdvanceKeyPressed()
         {
 #if UNITY_EDITOR && ENABLE_INPUT_SYSTEM
@@ -581,6 +704,7 @@ namespace SimJam.Tutorial
 #endif
         }
 
+        /// <summary>Editor-only: true the frame Backspace is pressed, to go back a step on desktop.</summary>
         private static bool WasBackKeyPressed()
         {
 #if UNITY_EDITOR && ENABLE_INPUT_SYSTEM
@@ -590,6 +714,10 @@ namespace SimJam.Tutorial
 #endif
         }
 
+        /// <summary>
+        /// Populates the default 9-step training sequence (welcome, intro, overview, the three gated
+        /// interactive steps, submit-a-reading, complete, and mission briefing) when none are authored.
+        /// </summary>
         private void AddStarterSteps()
         {
             m_steps.Add(new TutorialStep
@@ -647,6 +775,10 @@ namespace SimJam.Tutorial
             });
         }
 
+        /// <summary>
+        /// Builds the caption panel and all its widgets (canvas, background, title/body/counter text,
+        /// Back/Next/Pause buttons, and the pause overlay) at runtime for any references left unassigned.
+        /// </summary>
         private void EnsureDefaultUi()
         {
             if (m_canvas == null)
@@ -720,6 +852,10 @@ namespace SimJam.Tutorial
             }
         }
 
+        /// <summary>
+        /// Sets the canvas render mode: screen-space overlay for flat desktop, or world-space (scaled to
+        /// metres and anchored in the room) for VR.
+        /// </summary>
         private void ConfigureCanvas()
         {
             var rectTransform = m_canvas.GetComponent<RectTransform>();
@@ -736,6 +872,10 @@ namespace SimJam.Tutorial
             UpdateWorldPanelPose();
         }
 
+        /// <summary>
+        /// Anchors the world-space panel ONCE as a flat screen out on the wall the player faces at spawn
+        /// (levelled to horizontal), then freezes it so it does not head-lock or swim.
+        /// </summary>
         private void UpdateWorldPanelPose()
         {
             if (m_canvas == null || m_panelAnchored)
@@ -770,6 +910,7 @@ namespace SimJam.Tutorial
             m_panelAnchored = true;
         }
 
+        /// <summary>Creates a child GameObject with a configured RectTransform and returns it.</summary>
         private static RectTransform CreateRect(Transform parent, string objectName, Vector2 anchorMin, Vector2 anchorMax, Vector2 anchoredPosition, Vector2 size)
         {
             var rectObject = new GameObject(objectName);
@@ -784,6 +925,7 @@ namespace SimJam.Tutorial
             return rectTransform;
         }
 
+        /// <summary>Creates a non-raycasting TextMeshPro UGUI text element under the given parent.</summary>
         private TMP_Text CreateText(Transform parent, string objectName, Vector2 anchorMin, Vector2 anchorMax, Vector2 anchoredPosition, Vector2 size, float fontSize, TextAlignmentOptions alignment)
         {
             var rectTransform = CreateRect(parent, objectName, anchorMin, anchorMax, anchoredPosition, size);
@@ -796,11 +938,15 @@ namespace SimJam.Tutorial
             return text;
         }
 
+        /// <summary>Convenience overload that creates a button with the default size and font.</summary>
         private Button CreateButton(Transform parent, string objectName, string label, Vector2 anchorMin, Vector2 anchorMax, Vector2 anchoredPosition)
         {
             return CreateButton(parent, objectName, label, anchorMin, anchorMax, anchoredPosition, new Vector2(230f, 72f), 26f);
         }
 
+        /// <summary>
+        /// Creates a uGUI Button with the shared sprite/tint scheme and an auto-sizing centered label.
+        /// </summary>
         private Button CreateButton(Transform parent, string objectName, string label, Vector2 anchorMin, Vector2 anchorMax, Vector2 anchoredPosition, Vector2 size, float maxFontSize)
         {
             var rectTransform = CreateRect(parent, objectName, anchorMin, anchorMax, anchoredPosition, size);
@@ -829,6 +975,10 @@ namespace SimJam.Tutorial
             return button;
         }
 
+        /// <summary>
+        /// Builds the darkened pause overlay ("Paused" title + Resume button), starts it hidden, and
+        /// returns its GameObject.
+        /// </summary>
         private GameObject CreatePausePanel(Transform parent)
         {
             var panel = CreateRect(parent, "Pause Panel", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);

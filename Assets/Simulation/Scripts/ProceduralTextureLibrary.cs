@@ -3,22 +3,44 @@ using UnityEngine;
 
 namespace SimJam.BarrelSimulator
 {
+    /// <summary>
+    /// Central cache of code-generated (no image asset) textures used to dress the runtime-built
+    /// radiation lab: surfaces (concrete, painted wall, wood, ceiling tile), signage/posters,
+    /// hazard stripes, the detector plaque, blob shadows, and per-size barrel labels. Every texture
+    /// is drawn pixel-by-pixel on first access and cached in a static field so the spawner can pull
+    /// them without shipping any bitmap files. Deliberately size-only barrel labels keep every drum
+    /// visually identical so the hidden radioactive source can only be found with the detector.
+    /// </summary>
     public static class ProceduralTextureLibrary
     {
+        /// <summary>Cached 512px seamless concrete floor/surface texture (built lazily).</summary>
         private static Texture2D s_concrete512;
+        /// <summary>Cached 256px seamless off-white painted wall texture (built lazily).</summary>
         private static Texture2D s_paintedWall256;
+        /// <summary>Cached 256px seamless wood-plank grain texture used for shelving/props (built lazily).</summary>
         private static Texture2D s_woodGrain256;
+        /// <summary>Cached 256px seamless acoustic ceiling-tile texture with pinholes (built lazily).</summary>
         private static Texture2D s_ceilingTile256;
+        /// <summary>Cached 128px seamless yellow/black diagonal hazard-stripe texture (built lazily).</summary>
         private static Texture2D s_hazardStripe128;
+        /// <summary>Cached 128px green EXIT sign texture (built lazily).</summary>
         private static Texture2D s_exitSign128;
+        /// <summary>Cached 64px soft radial black blob-shadow texture used as a fake ground shadow (built lazily).</summary>
         private static Texture2D s_blobShadow64;
+        /// <summary>Cached 256px "CAUTION RADIATION AREA" poster with a trefoil symbol (built lazily).</summary>
         private static Texture2D s_radiationPoster256;
+        /// <summary>Cached 256px generic "SAFETY FIRST" workplace poster (built lazily).</summary>
         private static Texture2D s_safetyPoster256;
+        /// <summary>Cached 256px "RADIATION DETECTOR" wall plaque texture (built lazily).</summary>
         private static Texture2D s_detectorPlaque256;
+        /// <summary>Cached 256px "5 GAL" barrel size label texture (built lazily).</summary>
         private static Texture2D s_barrelLabel5;
+        /// <summary>Cached 256px "30 GAL" barrel size label texture (built lazily).</summary>
         private static Texture2D s_barrelLabel30;
+        /// <summary>Cached 256px "55 GAL" barrel size label texture (built lazily).</summary>
         private static Texture2D s_barrelLabel55;
 
+        /// <summary>Lazily built 512px seamless concrete texture for floors and structural surfaces.</summary>
         public static Texture2D Concrete512
         {
             get
@@ -31,6 +53,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Lazily built 256px seamless painted-wall texture for interior walls.</summary>
         public static Texture2D PaintedWall256
         {
             get
@@ -43,6 +66,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Lazily built 256px seamless wood-grain texture for wooden props/shelving.</summary>
         public static Texture2D WoodGrain256
         {
             get
@@ -55,6 +79,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Lazily built 256px seamless ceiling-tile texture for the lab ceiling.</summary>
         public static Texture2D CeilingTile256
         {
             get
@@ -67,6 +92,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Lazily built 128px seamless yellow/black hazard-stripe texture for warning trim.</summary>
         public static Texture2D HazardStripe128
         {
             get
@@ -79,6 +105,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Lazily built 128px green "EXIT" sign texture for the lab door area.</summary>
         public static Texture2D ExitSign128
         {
             get
@@ -91,6 +118,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Lazily built 64px transparent radial blob-shadow texture (fake contact shadow under props).</summary>
         public static Texture2D BlobShadow64
         {
             get
@@ -103,6 +131,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Lazily built 256px "CAUTION RADIATION AREA" poster texture (trefoil + text) for wall decoration.</summary>
         public static Texture2D RadiationPoster256
         {
             get
@@ -115,6 +144,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Lazily built 256px "SAFETY FIRST" workplace poster texture for wall decoration.</summary>
         public static Texture2D SafetyPoster256
         {
             get
@@ -127,6 +157,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Lazily built 256px "RADIATION DETECTOR" plaque texture (dark brushed panel with amber text).</summary>
         public static Texture2D DetectorPlaque256
         {
             get
@@ -142,6 +173,7 @@ namespace SimJam.BarrelSimulator
         // A barrel size label/sticker ("5 GAL" / "30 GAL" / "55 GAL"). Identical across all
         // barrels of a size, so it conveys only the size (already visible) and never which
         // barrel is the hidden source.
+        /// <summary>Lazily built 256px "5 GAL" steel-drum size label texture (seed 5051).</summary>
         public static Texture2D BarrelLabel5
         {
             get
@@ -154,6 +186,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Lazily built 256px "30 GAL" steel-drum size label texture (seed 3037).</summary>
         public static Texture2D BarrelLabel30
         {
             get
@@ -166,6 +199,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Lazily built 256px "55 GAL" steel-drum size label texture (seed 5519).</summary>
         public static Texture2D BarrelLabel55
         {
             get
@@ -178,6 +212,10 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>
+        /// Draws the 512px concrete texture: a mid-gray base with fractal mottling, darker damp
+        /// stains, per-pixel speckle, and a handful of hairline cracks traced as seamless random walks.
+        /// </summary>
         private static Texture2D BuildConcrete512()
         {
             const int size = 512;
@@ -231,6 +269,10 @@ namespace SimJam.BarrelSimulator
             return CreateTexture("ConcreteProc512", size, pixels, TextureWrapMode.Repeat);
         }
 
+        /// <summary>
+        /// Draws the 256px painted-wall texture: a near-white base with subtle fractal noise and a
+        /// faint vertical roller-streak variation for a lightly worn matte-paint look.
+        /// </summary>
         private static Texture2D BuildPaintedWall256()
         {
             const int size = 256;
@@ -256,6 +298,10 @@ namespace SimJam.BarrelSimulator
             return CreateTexture("PaintedWallProc256", size, pixels, TextureWrapMode.Repeat);
         }
 
+        /// <summary>
+        /// Draws the 256px wood-grain texture: four 64px-tall planks, each with a random brightness
+        /// shift, sinusoidal grain warped by noise, and a dark seam line at each plank boundary.
+        /// </summary>
         private static Texture2D BuildWoodGrain256()
         {
             const int size = 256;
@@ -294,6 +340,10 @@ namespace SimJam.BarrelSimulator
             return CreateTexture("WoodGrainProc256", size, pixels, TextureWrapMode.Repeat);
         }
 
+        /// <summary>
+        /// Draws the 256px acoustic ceiling-tile texture: a slightly warm off-white base speckled
+        /// with sparse darkened pinholes (plus dimmed neighbours), wrapped to stay seamless.
+        /// </summary>
         private static Texture2D BuildCeilingTile256()
         {
             const int size = 256;
@@ -330,6 +380,10 @@ namespace SimJam.BarrelSimulator
             return CreateTexture("CeilingTileProc256", size, pixels, TextureWrapMode.Repeat);
         }
 
+        /// <summary>
+        /// Draws the 128px hazard-stripe texture: alternating 16px diagonal yellow and black bands
+        /// (via the (x+y)/16 parity) with a touch of per-pixel wear, tiled seamlessly.
+        /// </summary>
         private static Texture2D BuildHazardStripe128()
         {
             const int size = 128;
@@ -354,6 +408,10 @@ namespace SimJam.BarrelSimulator
             return CreateTexture("HazardStripeProc128", size, pixels, TextureWrapMode.Repeat);
         }
 
+        /// <summary>
+        /// Draws the 128px EXIT sign texture: a dark housing border around a dark-green face with
+        /// bright green "EXIT" lettering.
+        /// </summary>
         private static Texture2D BuildExitSign128()
         {
             const int size = 128;
@@ -378,6 +436,10 @@ namespace SimJam.BarrelSimulator
             return CreateTexture("ExitSignProc128", size, pixels, TextureWrapMode.Clamp);
         }
 
+        /// <summary>
+        /// Draws the 64px blob-shadow texture: a black RGBA sprite whose alpha falls off radially
+        /// from the centre (max ~0.6), used as a cheap fake contact shadow under props/barrels.
+        /// </summary>
         private static Texture2D BuildBlobShadow64()
         {
             const int size = 64;
@@ -396,6 +458,10 @@ namespace SimJam.BarrelSimulator
             return CreateTexture("BlobShadowProc64", size, pixels, TextureWrapMode.Clamp);
         }
 
+        /// <summary>
+        /// Draws the 256px radiation-warning poster: a yellow field with a black border, a magenta
+        /// radiation trefoil (centre disc plus three angular blades) and "CAUTION" / "RADIATION AREA" text.
+        /// </summary>
         private static Texture2D BuildRadiationPoster256()
         {
             const int size = 256;
@@ -442,6 +508,10 @@ namespace SimJam.BarrelSimulator
             return CreateTexture("RadiationPosterProc256", size, pixels, TextureWrapMode.Clamp);
         }
 
+        /// <summary>
+        /// Draws the 256px generic safety poster: a white sheet with a blue header band holding
+        /// "SAFETY FIRST" text and several gray placeholder bars suggesting body copy.
+        /// </summary>
         private static Texture2D BuildSafetyPoster256()
         {
             const int size = 256;
@@ -484,6 +554,10 @@ namespace SimJam.BarrelSimulator
             return CreateTexture("SafetyPosterProc256", size, pixels, TextureWrapMode.Clamp);
         }
 
+        /// <summary>
+        /// Draws the 256px detector plaque: a dark, faintly brushed-metal panel with a lighter raised
+        /// bezel border and amber "RADIATION" / "DETECTOR" engraved-style text.
+        /// </summary>
         private static Texture2D BuildDetectorPlaque256()
         {
             const int size = 256;
@@ -513,6 +587,13 @@ namespace SimJam.BarrelSimulator
             return CreateTexture("DetectorPlaqueProc256", size, pixels, TextureWrapMode.Clamp);
         }
 
+        /// <summary>
+        /// Draws a 256px steel-drum placard label: a warm manila background, a black border, a blue
+        /// "STEEL DRUM" header band, the large size text (e.g. "55 GAL"), and a faint "UN 1A2 Y" spec
+        /// line. Identical for every drum of a given size so labels never reveal the hidden source.
+        /// </summary>
+        /// <param name="sizeText">Size caption to print big (e.g. "5 GAL"), also used in the texture name.</param>
+        /// <param name="seed">Deterministic RNG seed so the background grain is stable per size.</param>
         private static Texture2D BuildBarrelLabel(string sizeText, int seed)
         {
             const int size = 256;
@@ -548,6 +629,10 @@ namespace SimJam.BarrelSimulator
             return CreateTexture("BarrelLabel" + sizeText.Replace(" ", string.Empty), size, pixels, TextureWrapMode.Clamp);
         }
 
+        /// <summary>
+        /// Fills an axis-aligned rectangle of the pixel buffer with a solid color, clipping to the
+        /// texture bounds. Used to paint borders and header bands on the drawn labels/posters.
+        /// </summary>
         private static void FillRect(Color32[] pixels, int texSize, int x0, int y0, int w, int h, Color32 color)
         {
             for (int y = y0; y < y0 + h; y++)
@@ -567,6 +652,10 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>
+        /// Wraps a finished pixel buffer into a mip-mapped RGBA32 <see cref="Texture2D"/> with the
+        /// given name and wrap mode, trilinear filtering and 2x anisotropy, then uploads it to the GPU.
+        /// </summary>
         private static Texture2D CreateTexture(string name, int size, Color32[] pixels, TextureWrapMode wrapMode)
         {
             Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, true);
@@ -580,6 +669,10 @@ namespace SimJam.BarrelSimulator
         }
 
         // Periodic by construction: bilinear blend of four wrapped Perlin samples.
+        /// <summary>
+        /// Returns seamless (tileable) Perlin noise in [0,1] for the given texel: it bilinearly blends
+        /// the four Perlin samples taken at the point and at its wrapped counterparts one period away.
+        /// </summary>
         private static float TileableNoise(float x, float y, float size, float frequency, float offsetX, float offsetY)
         {
             float u = x / size;
@@ -591,6 +684,10 @@ namespace SimJam.BarrelSimulator
             return Mathf.Lerp(Mathf.Lerp(n00, n10, u), Mathf.Lerp(n01, n11, u), v);
         }
 
+        /// <summary>
+        /// Sums several octaves of <see cref="TileableNoise"/> (doubling frequency, halving amplitude
+        /// each step) and normalizes to [0,1], giving seamless fractal/fBm detail for surfaces.
+        /// </summary>
         private static float FractalTileableNoise(int x, int y, int size, float baseFrequency, int octaves, float[] offsetsX, float[] offsetsY)
         {
             float sum = 0.0f;
@@ -607,6 +704,10 @@ namespace SimJam.BarrelSimulator
             return sum / total;
         }
 
+        /// <summary>
+        /// Precomputes a per-octave array of Perlin sampling offsets so each octave draws from a
+        /// different, randomized region of the noise field (avoids octaves lining up into artifacts).
+        /// </summary>
         private static float[] NoiseOffsets(System.Random rng, int octaves, float size, float baseFrequency)
         {
             float[] offsets = new float[octaves];
@@ -619,17 +720,24 @@ namespace SimJam.BarrelSimulator
             return offsets;
         }
 
+        /// <summary>Clamps a 0..1 float and converts it to an 8-bit color channel value (0..255).</summary>
         private static byte ToByte(float v)
         {
             return (byte)Mathf.RoundToInt(Mathf.Clamp01(v) * 255.0f);
         }
 
+        /// <summary>Builds an opaque <see cref="Color32"/> from clamped 0..1 float RGB components.</summary>
         private static Color32 MakeColor(float r, float g, float b)
         {
             return new Color32(ToByte(r), ToByte(g), ToByte(b), 255);
         }
 
         // 5x7 glyphs, one byte per row (top first), bit 4 = leftmost column.
+        /// <summary>
+        /// Tiny built-in bitmap font: maps uppercase letters, digits and space to a 5x7 pixel glyph
+        /// (one byte per row, top row first, bit 4 = leftmost column). Used by <see cref="DrawText"/>
+        /// to bake caption text into the generated signage/label textures without any font asset.
+        /// </summary>
         private static readonly Dictionary<char, byte[]> Font = new Dictionary<char, byte[]>
         {
             { ' ', new byte[] { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 } },
@@ -671,6 +779,11 @@ namespace SimJam.BarrelSimulator
             { '9', new byte[] { 0x0E, 0x11, 0x11, 0x0F, 0x01, 0x02, 0x0C } },
         };
 
+        /// <summary>
+        /// Rasterizes a string into the pixel buffer using the built-in 5x7 <see cref="Font"/>,
+        /// horizontally and vertically centred on (centerX, centerY) and blown up by the integer
+        /// <paramref name="scale"/>. Unknown characters are skipped and drawing is clipped to bounds.
+        /// </summary>
         private static void DrawText(Color32[] pixels, int textureWidth, int textureHeight, string text, int centerX, int centerY, int scale, Color32 color)
         {
             int advance = 6 * scale;

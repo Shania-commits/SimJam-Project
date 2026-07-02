@@ -2,17 +2,38 @@ using UnityEngine;
 
 namespace SimJam.BarrelSimulator
 {
+    /// <summary>
+    /// Static factory that assembles the handheld identiFINDER survey meter used to hunt the hidden
+    /// radioactive barrel. Offers two paths: <see cref="Build"/> constructs the whole meter procedurally
+    /// out of Unity primitives (body, grip, screen, buttons, speaker holes, brand label), while
+    /// <see cref="BuildFromPrefab"/> wraps an authored art prefab. Both return a grabbable root with a
+    /// collider, rigidbody, and a sensor-tip transform the radiation model samples from.
+    /// </summary>
     public static class DetectorModelBuilder
     {
+        /// <summary>
+        /// Bundle of the key components on a procedurally built detector, handed back to the spawner so
+        /// it can drive the readout, sample radiation at the tip, and attach grab/physics behaviour.
+        /// </summary>
         public struct DetectorParts
         {
+            /// <summary>Root GameObject that parents every mesh piece and carries the collider/body.</summary>
             public GameObject Root;
+            /// <summary>The green LCD text the CPS / dose readout is written into each frame.</summary>
             public TextMesh ScreenText;
+            /// <summary>Empty transform at the sensor dome; the radiation field is measured from this point.</summary>
             public Transform SensorTip;
+            /// <summary>Grab collider covering the whole meter (used for proximity grabbing).</summary>
             public BoxCollider BodyCollider;
+            /// <summary>Physics body for the meter; toggled kinematic while held by the grab code.</summary>
             public Rigidbody Body;
         }
 
+        /// <summary>
+        /// Builds a complete identiFINDER out of Unity primitives (no external art) — body, rubber rails
+        /// and bumper, sensor dome, ribbed grip, bezelled screen, buttons, speaker grille, and text labels —
+        /// then adds the grab collider, rigidbody, and sensor tip. Returns the assembled parts.
+        /// </summary>
         public static DetectorParts Build()
         {
             GameObject root = new GameObject("identiFINDER");
@@ -107,17 +128,33 @@ namespace SimJam.BarrelSimulator
             return parts;
         }
 
+        /// <summary>
+        /// Bundle returned by <see cref="BuildFromPrefab"/>: the wrapper root plus the pieces the spawner
+        /// needs to place the meter in the hand, sample radiation at the tip, and locate the screen source.
+        /// </summary>
         public struct PrefabDetector
         {
+            /// <summary>Clean wrapper root carrying the collider/body, with the art prefab parented under it.</summary>
             public GameObject Root;
+            /// <summary>Empty transform at the top of the mesh; the radiation field is measured from here.</summary>
             public Transform SensorTip;
+            /// <summary>Distance from the root down to the collider's bottom, so the meter can rest on a surface.</summary>
             public float ColliderBottomOffset;
+            /// <summary>The instantiated prefab whose world-space screen the readout binder writes into.</summary>
             public GameObject ScreenSource;
         }
 
         // The SAME identiFINDER as the lab: instantiate the colleague's prefab, auto-scale it to a sane
         // height, re-centre the mesh on a clean root, and add a grab collider + body + sensor tip. Mirrors
         // RadiationLabRoomSpawner.BuildCustomDetectorModel so the tutorial and lab show the identical model.
+        /// <summary>
+        /// Wraps an authored identiFINDER art prefab into a grabbable meter: instantiates it, strips any
+        /// duplicate EventSystem, scales it to <paramref name="targetHeight"/>, re-centres it on a clean
+        /// root, and adds a fitted box collider, rigidbody, and sensor tip. Kept in sync with the lab
+        /// spawner so the tutorial and the lab display the identical model.
+        /// </summary>
+        /// <param name="prefab">The authored identiFINDER model to instantiate and wrap.</param>
+        /// <param name="targetHeight">Desired world-space height (metres) to auto-scale the mesh to.</param>
         public static PrefabDetector BuildFromPrefab(GameObject prefab, float targetHeight)
         {
             var root = new GameObject("identiFINDER");
@@ -173,6 +210,11 @@ namespace SimJam.BarrelSimulator
 
         // Bounds of the 3D mesh ONLY -- skips the world-space screen Canvas + sprite overlay, whose
         // authored offset would otherwise blow up the bounds and shrink/misplace the model.
+        /// <summary>
+        /// Computes the combined world-space bounds of the prefab's solid mesh renderers, deliberately
+        /// ignoring UI Canvas renderers and sprite overlays (the screen) so the auto-scale/re-centre
+        /// logic measures only the physical model. Returns false when no qualifying renderer is found.
+        /// </summary>
         private static bool TryGetMeshBounds(GameObject root, out Bounds bounds)
         {
             bounds = default;
@@ -198,6 +240,10 @@ namespace SimJam.BarrelSimulator
             return hasBounds;
         }
 
+        /// <summary>
+        /// Creates a runtime material on the Built-in pipeline's Standard shader with the given base
+        /// colour, metallic, and glossiness — used for the meter's body, rubber, and accent pieces.
+        /// </summary>
         private static Material MakeStandardMaterial(Color color, float metallic, float glossiness)
         {
             Material material = new Material(Shader.Find("Standard"));
@@ -207,6 +253,11 @@ namespace SimJam.BarrelSimulator
             return material;
         }
 
+        /// <summary>
+        /// Builds the glowing green LCD material for the screen face. Prefers the pre-authored
+        /// <c>SimJamEmissiveScreen</c> material (forced into builds to survive shader stripping) and
+        /// falls back to a Standard shader with emission enabled if it is missing.
+        /// </summary>
         private static Material MakeScreenMaterial()
         {
             Color baseColor = new Color(0.02f, 0.05f, 0.03f);
@@ -227,11 +278,20 @@ namespace SimJam.BarrelSimulator
             return material;
         }
 
+        /// <summary>
+        /// Overload of <see cref="CreatePart(GameObject,string,PrimitiveType,Vector3,Vector3,Material,Quaternion)"/>
+        /// that spawns the primitive with no rotation (identity).
+        /// </summary>
         private static void CreatePart(GameObject root, string name, PrimitiveType type, Vector3 localPosition, Vector3 localScale, Material material)
         {
             CreatePart(root, name, type, localPosition, localScale, material, Quaternion.identity);
         }
 
+        /// <summary>
+        /// Spawns a single Unity primitive as a child of the detector root at the given local transform
+        /// and material. Disables the primitive's own collider (the meter uses one shared box collider)
+        /// so these pieces are visual-only.
+        /// </summary>
         private static void CreatePart(GameObject root, string name, PrimitiveType type, Vector3 localPosition, Vector3 localScale, Material material, Quaternion localRotation)
         {
             GameObject part = GameObject.CreatePrimitive(type);
@@ -244,6 +304,11 @@ namespace SimJam.BarrelSimulator
             part.GetComponent<MeshRenderer>().sharedMaterial = material;
         }
 
+        /// <summary>
+        /// Creates a child <see cref="TextMesh"/> for on-model text (the screen readout and the
+        /// "identiFINDER" brand label), configured centre-anchored, plain (non-rich) text using the
+        /// supplied legacy font. Returns the TextMesh so its content can be updated at runtime.
+        /// </summary>
         private static TextMesh CreateTextMesh(GameObject root, string name, Vector3 localPosition, float characterSize, int fontSize, Color color, string text, Font font)
         {
             GameObject go = new GameObject(name);

@@ -5,12 +5,23 @@ using UnityEngine.Serialization;
 
 namespace SimJam.BarrelSimulator
 {
+    /// <summary>
+    /// Single-MonoBehaviour spawner that builds an entire "find the hidden radioactive barrel" scene at
+    /// runtime: an OVR camera rig with locomotion (smooth move, snap turn, teleport), a two-room office
+    /// with a swinging connecting door, randomized props (folding tables and wall shelves), and a walkable,
+    /// visibility-checked field of drums (55/30/5-gallon) that each carry a randomized radiation count for
+    /// the identiFINDER to read. Almost every object is code-generated; the scene itself is near-empty.
+    /// </summary>
     public class BasicVRRoomBarrelSpawner : MonoBehaviour
     {
+        /// <summary>Conversion factor from feet (the units the room is authored in) to Unity meters.</summary>
         private const float FeetToMeters = 0.3048f;
+        /// <summary>Default lab-room edge length in feet used when no override is supplied.</summary>
         private const float DefaultRoomFeet = 20f;
+        /// <summary>Default lab-room edge length converted to meters.</summary>
         private const float DefaultRoomMeters = DefaultRoomFeet * FeetToMeters;
 
+        /// <summary>The three physical drum sizes that can be spawned, in gallons.</summary>
         private enum BarrelSize
         {
             Gallon55,
@@ -18,6 +29,7 @@ namespace SimJam.BarrelSimulator
             Gallon5
         }
 
+        /// <summary>Which kind of surface a spawn slot sits on; controls spacing, allowed sizes, and visibility rules.</summary>
         private enum SurfaceKind
         {
             Floor,
@@ -25,6 +37,7 @@ namespace SimJam.BarrelSimulator
             Shelf
         }
 
+        /// <summary>Identifies which wall a wall-mounted shelf is attached to.</summary>
         private enum WallSide
         {
             North,
@@ -33,178 +46,304 @@ namespace SimJam.BarrelSimulator
             West
         }
 
+        /// <summary>Inspector-assigned prefab references for each drum size (the base 55-gallon field is legacy-renamed).</summary>
         [Serializable]
         private struct BarrelPrefabSet
         {
+            /// <summary>Prefab used for 55-gallon drums.</summary>
             [FormerlySerializedAs("m_barrelPrefab")] public GameObject barrel55GallonPrefab;
+            /// <summary>Prefab used for 30-gallon drums.</summary>
             public GameObject barrel30GallonPrefab;
+            /// <summary>Prefab used for 5-gallon drums/pails.</summary>
             public GameObject barrel5GallonPrefab;
         }
 
+        /// <summary>Resolved per-size drum description (prefab, real-world dimensions, colour, selection weight) built once per layout pass.</summary>
         private struct BarrelSpec
         {
+            /// <summary>Which drum size this spec describes.</summary>
             public BarrelSize Size;
+            /// <summary>Human-readable label (e.g. "55 GAL") applied to the spawned object name.</summary>
             public string Label;
+            /// <summary>Source prefab to instantiate, or null to fall back to a primitive placeholder.</summary>
             public GameObject Prefab;
+            /// <summary>Initial local scale applied to the instantiated prefab before physical fit-up.</summary>
             public Vector3 ModelScale;
+            /// <summary>Target physical diameter in meters used for fit-up, colliders, and spacing.</summary>
             public float Diameter;
+            /// <summary>Target physical height in meters used for fit-up and colliders.</summary>
             public float Height;
+            /// <summary>Height at which a side label would sit (retained for placement metadata).</summary>
             public float LabelHeight;
+            /// <summary>Body colour used for the placeholder cylinder when no prefab is assigned.</summary>
             public Color BodyColor;
+            /// <summary>Relative probability weight for choosing this size in a slot (smaller drums are favoured).</summary>
             public float SelectionWeight;
         }
 
+        /// <summary>A candidate placement position for one drum, with orientation, surface type, and size constraints.</summary>
         private struct SpawnSlot
         {
+            /// <summary>World position of the surface point the drum rests on.</summary>
             public Vector3 Position;
+            /// <summary>Direction the drum's label should face (typically toward room centre).</summary>
             public Vector3 LabelForward;
+            /// <summary>Surface kind (floor/table/shelf) this slot belongs to.</summary>
             public SurfaceKind Surface;
+            /// <summary>Drum sizes permitted in this slot.</summary>
             public BarrelSize[] AllowedSizes;
+            /// <summary>Whether the drum may be tipped on its side here.</summary>
             public bool AllowSideways;
+            /// <summary>Yaw of the underlying surface, for aligning the drum.</summary>
             public float SurfaceYaw;
+            /// <summary>Name of the prop that produced this slot (used in the spawned object's name).</summary>
             public string SourceName;
         }
 
+        /// <summary>Record of an already-placed drum, used for spacing and line-of-sight checks against later slots.</summary>
         private struct PlacedBarrel
         {
+            /// <summary>World position of the placed drum's base.</summary>
             public Vector3 Position;
+            /// <summary>Horizontal radius of the placed drum.</summary>
             public float Radius;
+            /// <summary>Height of the placed drum.</summary>
             public float Height;
+            /// <summary>Size category of the placed drum.</summary>
             public BarrelSize Size;
+            /// <summary>Surface the placed drum sits on.</summary>
             public SurfaceKind Surface;
         }
 
+        /// <summary>An oriented rectangle on the floor plane used as a navigation/overlap obstacle footprint.</summary>
         private struct ObstacleRect
         {
+            /// <summary>Rectangle centre in the XZ plane.</summary>
             public Vector2 Center;
+            /// <summary>Half width/depth of the rectangle.</summary>
             public Vector2 HalfExtents;
+            /// <summary>Rotation of the rectangle about the up axis, in degrees.</summary>
             public float YawDegrees;
         }
 
+        /// <summary>Metadata about a spawned prop (table or shelf): its transform, footprint, and the surfaces drums can be placed on.</summary>
         private sealed class PropInfo
         {
+            /// <summary>Root transform of the prop.</summary>
             public Transform Transform;
+            /// <summary>Floor footprint used for navigation and overlap tests.</summary>
             public ObstacleRect Footprint;
+            /// <summary>Primary usable surface height (top of table, or first shelf tier).</summary>
             public float SurfaceY;
+            /// <summary>Inward-facing direction (toward the room) drums should face.</summary>
             public Vector3 Forward;
+            /// <summary>Usable surface size (XZ) for laying out slots.</summary>
             public Vector2 Size;
+            /// <summary>Number of stacked surfaces (shelf tiers).</summary>
             public int TierCount;
+            /// <summary>Absolute Y height of each shelf tier's placement surface.</summary>
             public List<float> ShelfSurfaceHeights;
+            /// <summary>Usable local slot area per shelf tier.</summary>
             public Vector2 ShelfSlotSize;
+            /// <summary>Local-space centre offset for shelf slots (pushed toward the front edge).</summary>
             public Vector3 ShelfSlotCenterLocal;
+            /// <summary>Which wall this shelf is mounted on.</summary>
             public WallSide Wall;
+            /// <summary>Display name of the prop, propagated to spawned drum names.</summary>
             public string Name;
         }
 
         [Header("VR rig")]
+        /// <summary>When true, find or create an OVRCameraRig; otherwise fall back to a plain main camera.</summary>
         [SerializeField] private bool m_createOvrCameraRig = true;
+        /// <summary>Requested spawn position for the player; clamped to the spawn room if invalid.</summary>
         [SerializeField] private Vector3 m_playerStartPosition = Vector3.zero;
+        /// <summary>Eye height in meters used only for the non-OVR camera fallback.</summary>
         [SerializeField, Min(0.5f)] private float m_defaultEyeHeight = 1.6f;
 
         [Header("Room scale")]
+        /// <summary>When true, generate the full two-room shell (floors, walls, ceiling, lights, door).</summary>
         [SerializeField] private bool m_buildRoomGeometry = true;
+        /// <summary>Lab-room footprint in feet.</summary>
         [SerializeField] private Vector2 m_roomSizeFeet = new Vector2(DefaultRoomFeet, DefaultRoomFeet);
+        /// <summary>Adjoining spawn/home-room footprint in feet.</summary>
         [SerializeField] private Vector2 m_spawnRoomSizeFeet = new Vector2(12f, 12f);
+        /// <summary>Wall/ceiling height in meters for both rooms.</summary>
         [SerializeField, Min(1f)] private float m_wallHeight = 2.75f;
+        /// <summary>Thickness of generated walls in meters.</summary>
         [SerializeField, Min(0.02f)] private float m_wallThickness = 0.1f;
+        /// <summary>Thickness of generated floor slabs in meters.</summary>
         [SerializeField, Min(0.02f)] private float m_floorThickness = 0.08f;
+        /// <summary>Whether to draw the editor gizmo preview of room/aisle/door bounds.</summary>
         [SerializeField] private bool m_showEditorScalePreview = true;
 
         [Header("Connecting door")]
+        /// <summary>Width of the doorway opening in the shared wall, in meters.</summary>
         [SerializeField, Min(0.6f)] private float m_doorwayWidth = 0.95f;
+        /// <summary>Height of the doorway opening, in meters.</summary>
         [SerializeField, Min(1.5f)] private float m_doorwayHeight = 2.1f;
+        /// <summary>Yaw angle (degrees) the door swings to when opened.</summary>
         [SerializeField, Range(-130f, 130f)] private float m_doorOpenAngle = -95f;
+        /// <summary>How close a controller must be to a knob to toggle the door, in meters.</summary>
         [SerializeField, Min(0.05f)] private float m_doorKnobInteractionRadius = 0.24f;
+        /// <summary>Minimum time between door open/close toggles, in seconds.</summary>
         [SerializeField, Min(0.05f)] private float m_doorToggleCooldown = 0.35f;
+        /// <summary>Door swing speed in degrees per second.</summary>
         [SerializeField, Min(15f)] private float m_doorSwingSpeed = 150f;
 
         [Header("Controller hand visuals")]
+        /// <summary>Whether to attach simple procedural hand meshes to the controller anchors.</summary>
         [SerializeField] private bool m_showControllerHands = true;
+        /// <summary>Uniform scale applied to the controller hand visuals.</summary>
         [SerializeField, Min(0.1f)] private float m_controllerHandScale = 1f;
 
         [Header("Barrel prefabs")]
+        /// <summary>Per-size drum prefab references.</summary>
         [SerializeField] private BarrelPrefabSet m_barrelPrefabs;
+        /// <summary>Optional profile that supplies realistic randomized radiation counts; falls back to a generated pool if null.</summary>
         [SerializeField] private RadiationCountProfile m_radiationCountProfile;
+        /// <summary>Initial local scale for the 55-gallon prefab before physical fit-up.</summary>
         [SerializeField] private Vector3 m_barrel55ModelScale = new Vector3(0.19567f, 0.1853504f, 0.19567f);
+        /// <summary>Initial local scale for the 30-gallon prefab before physical fit-up.</summary>
         [SerializeField] private Vector3 m_barrel30ModelScale = new Vector3(0.14f, 0.14f, 0.14f);
+        /// <summary>Initial local scale for the 5-gallon prefab before physical fit-up.</summary>
         [SerializeField] private Vector3 m_barrel5ModelScale = new Vector3(0.07f, 0.07f, 0.07f);
 
         [Header("Scenario randomization")]
+        /// <summary>Minimum number of drums to attempt to spawn per run.</summary>
         [SerializeField, Min(1)] private int m_minBarrels = 1;
+        /// <summary>Maximum number of drums to attempt to spawn per run.</summary>
         [SerializeField, Min(1)] private int m_maxBarrels = 45;
+        /// <summary>Minimum number of folding tables to generate.</summary>
         [SerializeField, Min(0)] private int m_minTables;
+        /// <summary>Maximum number of folding tables to generate.</summary>
         [SerializeField, Min(0)] private int m_maxTables = 4;
+        /// <summary>Minimum number of wall shelf units to generate.</summary>
         [SerializeField, Min(0)] private int m_minShelfUnits = 2;
+        /// <summary>Maximum number of wall shelf units to generate.</summary>
         [SerializeField, Min(0)] private int m_maxShelfUnits = 9;
+        /// <summary>Number of full layout attempts to make while trying to hit the requested drum count.</summary>
         [SerializeField, Min(1)] private int m_layoutRetryCount = 10;
+        /// <summary>When true, use <see cref="m_fixedSeed"/> for reproducible layouts.</summary>
         [SerializeField] private bool m_useFixedSeed;
+        /// <summary>Deterministic seed used when <see cref="m_useFixedSeed"/> is enabled.</summary>
         [SerializeField] private int m_fixedSeed = 12345;
 
         [Header("Visibility and walkability")]
+        /// <summary>Radius around the player start position kept clear of props/drums, in meters.</summary>
         [SerializeField, Min(0.1f)] private float m_playerClearance = 0.8f;
+        /// <summary>Player collision radius used for walkability tests, in meters.</summary>
         [SerializeField, Min(0.05f)] private float m_playerRadius = 0.28f;
+        /// <summary>Width of the cross-shaped central aisle kept clear through the lab, in meters.</summary>
         [SerializeField, Min(0.2f)] private float m_centralAisleWidth = 0.95f;
+        /// <summary>Minimum center-to-center spacing between floor drums, in meters.</summary>
         [SerializeField, Min(0.05f)] private float m_floorBarrelSpacing = 0.64f;
+        /// <summary>Minimum spacing between drums on a table, in meters.</summary>
         [SerializeField, Min(0.01f)] private float m_tableBarrelSpacing = 0.34f;
+        /// <summary>Minimum spacing between drums on a shelf, in meters.</summary>
         [SerializeField, Min(0.01f)] private float m_shelfBarrelSpacing = 0.28f;
 
         [Header("Shelf asset")]
+        /// <summary>Optional shelf model instantiated per tier; if null, primitive boards are built instead.</summary>
         [SerializeField] private GameObject m_wallShelfPrefab;
+        /// <summary>Small vertical gap left above a shelf surface so drums do not clip into it, in meters.</summary>
         [SerializeField, Min(0.001f)] private float m_shelfSurfaceClearance = 0.015f;
 
         [Header("Locomotion")]
+        /// <summary>Enables left-thumbstick smooth locomotion.</summary>
         [SerializeField] private bool m_enableSmoothMove = true;
+        /// <summary>Enables right-controller aim-and-trigger teleport.</summary>
         [SerializeField] private bool m_enableTeleport = true;
+        /// <summary>Smooth move speed in meters per second.</summary>
         [SerializeField, Min(0.1f)] private float m_smoothMoveSpeed = 1.35f;
+        /// <summary>Degrees turned per snap-turn input.</summary>
         [SerializeField, Min(5f)] private float m_snapTurnDegrees = 30f;
+        /// <summary>Minimum time between snap turns, in seconds.</summary>
         [SerializeField, Min(0.05f)] private float m_snapTurnCooldown = 0.3f;
+        /// <summary>Thumbstick magnitude below which input is ignored.</summary>
         [SerializeField, Min(0.05f)] private float m_thumbstickDeadzone = 0.22f;
 
         [Header("Fallback counts")]
+        /// <summary>Number of pre-generated radiation counts in the fallback pool.</summary>
         [SerializeField, Min(1)] private int m_fallbackCountPoolSize = 2048;
+        /// <summary>Lower bound (inclusive) for fallback radiation counts.</summary>
         [SerializeField, Min(0)] private int m_fallbackMinCount = 250;
+        /// <summary>Upper bound (inclusive) for fallback radiation counts.</summary>
         [SerializeField, Min(0)] private int m_fallbackMaxCount = 50000;
 
+        /// <summary>All BarrelInstance components spawned this run.</summary>
         private readonly List<BarrelInstance> m_spawnedBarrels = new();
+        /// <summary>Every runtime-created GameObject, tracked for cleanup on clear.</summary>
         private readonly List<GameObject> m_spawnedObjects = new();
+        /// <summary>Metadata for the tables generated this run.</summary>
         private readonly List<PropInfo> m_tables = new();
+        /// <summary>Metadata for the shelves generated this run.</summary>
         private readonly List<PropInfo> m_shelves = new();
+        /// <summary>Candidate drum placement slots for the current layout.</summary>
         private readonly List<SpawnSlot> m_spawnSlots = new();
+        /// <summary>Drums already placed this layout pass, used for spacing/visibility tests.</summary>
         private readonly List<PlacedBarrel> m_placedBarrels = new();
+        /// <summary>Floor footprints (props + floor drums) the player cannot walk through.</summary>
         private readonly List<ObstacleRect> m_navigationObstacles = new();
+        /// <summary>Materials created at runtime, destroyed in <see cref="OnDestroy"/>.</summary>
         private readonly List<Material> m_runtimeMaterials = new();
+        /// <summary>Cache keyed by colour/name so identical materials are reused.</summary>
         private readonly Dictionary<string, Material> m_materialCache = new();
 
+        /// <summary>Pre-generated radiation counts used when no <see cref="RadiationCountProfile"/> is assigned.</summary>
         private int[] m_fallbackCountPool;
+        /// <summary>The player's head/eye transform (center-eye anchor or fallback camera).</summary>
         private Transform m_cameraTransform;
+        /// <summary>Transform moved by locomotion (the rig root or fallback camera).</summary>
         private Transform m_locomotionRoot;
+        /// <summary>The active OVR camera rig, if one is used.</summary>
         private OVRCameraRig m_cameraRig;
+        /// <summary>Parent transform holding all generated room shell geometry.</summary>
         private Transform m_roomRoot;
+        /// <summary>Parent transform holding the randomized props and drums (rebuilt each run).</summary>
         private Transform m_scenarioRoot;
+        /// <summary>Disc marker showing the current teleport destination.</summary>
         private GameObject m_teleportMarker;
+        /// <summary>Renderer of the teleport marker, swapped between valid/invalid materials.</summary>
         private Renderer m_teleportMarkerRenderer;
+        /// <summary>Green material shown when the teleport target is valid.</summary>
         private Material m_validTeleportMaterial;
+        /// <summary>Red material shown when the teleport target is invalid.</summary>
         private Material m_invalidTeleportMaterial;
+        /// <summary>Hinge transform the connecting door swings around.</summary>
         private Transform m_doorPivot;
+        /// <summary>Knob on the lab-facing side of the door.</summary>
         private Transform m_labDoorKnob;
+        /// <summary>Knob on the spawn-room-facing side of the door.</summary>
         private Transform m_spawnDoorKnob;
+        /// <summary>Current door swing angle in degrees (animated toward the target).</summary>
         private float m_doorCurrentAngle;
+        /// <summary>Whether the door is currently open.</summary>
         private bool m_isDoorOpen;
+        /// <summary>Earliest time the door may be toggled again.</summary>
         private float m_nextDoorToggleTime;
+        /// <summary>Procedural hand visual attached to the left controller.</summary>
         private GameObject m_leftHandVisual;
+        /// <summary>Procedural hand visual attached to the right controller.</summary>
         private GameObject m_rightHandVisual;
+        /// <summary>Latest computed teleport destination on the floor.</summary>
         private Vector3 m_currentTeleportTarget;
+        /// <summary>Whether <see cref="m_currentTeleportTarget"/> is a legal destination.</summary>
         private bool m_hasValidTeleportTarget;
+        /// <summary>Earliest time a snap turn may occur again.</summary>
         private float m_nextSnapTurnTime;
 
+        /// <summary>Lab-room footprint in meters, floored at an 8ft minimum edge.</summary>
         private Vector2 RoomSizeMeters => new(
             Mathf.Max(8f, m_roomSizeFeet.x) * FeetToMeters,
             Mathf.Max(8f, m_roomSizeFeet.y) * FeetToMeters);
 
+        /// <summary>Spawn-room footprint in meters, floored at an 8ft minimum edge.</summary>
         private Vector2 SpawnRoomSizeMeters => new(
             Mathf.Max(8f, m_spawnRoomSizeFeet.x) * FeetToMeters,
             Mathf.Max(8f, m_spawnRoomSizeFeet.y) * FeetToMeters);
 
+        /// <summary>World-space center of the spawn room, placed just south of the shared wall.</summary>
         private Vector3 SpawnRoomCenter
         {
             get
@@ -215,6 +354,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Validated player start position; the serialized value if it lies in the spawn room, otherwise a safe default there.</summary>
         private Vector3 PlayerStartPosition
         {
             get
@@ -229,11 +369,13 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Unity lifecycle: sets up the camera rig and caches the head transform before the first frame.</summary>
         private void Awake()
         {
             m_cameraTransform = EnsureCameraRig();
         }
 
+        /// <summary>Unity lifecycle: builds the room shell (if enabled), controller hands, and the first randomized run.</summary>
         private void Start()
         {
             if (m_buildRoomGeometry)
@@ -245,6 +387,7 @@ namespace SimJam.BarrelSimulator
             GenerateRun();
         }
 
+        /// <summary>Unity lifecycle: drives per-frame locomotion, door interaction/swing, and debug input (A regenerates, B clears, X re-rolls counts).</summary>
         private void Update()
         {
             EnsureControllerHandVisuals();
@@ -269,6 +412,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Clears any prior scenario and generates a fresh randomized layout, retrying seeds to place as many valid drums as possible.</summary>
         public void GenerateRun()
         {
             ClearScenario();
@@ -324,6 +468,7 @@ namespace SimJam.BarrelSimulator
                 : $"Requested {requestedCount}; placed {finalCount} visible/walkable barrels.");
         }
 
+        /// <summary>Destroys all spawned props/drums and resets the per-run bookkeeping lists and scenario root.</summary>
         public void ClearScenario()
         {
             foreach (var spawnedObject in m_spawnedObjects)
@@ -349,6 +494,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Re-rolls the radiation count on every already-spawned drum without changing the layout.</summary>
         public void RandomizeRadiationCounts()
         {
             if (m_spawnedBarrels.Count == 0)
@@ -371,6 +517,7 @@ namespace SimJam.BarrelSimulator
             SetStatus("Randomized barrel counts.");
         }
 
+        /// <summary>Finds or creates the OVR camera rig (or a plain camera fallback), positions it at the player start, and returns the head transform.</summary>
         private Transform EnsureCameraRig()
         {
             if (m_createOvrCameraRig)
@@ -427,6 +574,7 @@ namespace SimJam.BarrelSimulator
             return camera.transform;
         }
 
+        /// <summary>Applies the sim's standard camera settings (skybox clear, clip planes, single-pass stereo, no HDR) to a rig's center eye.</summary>
         private static void ConfigureRig(OVRCameraRig rig)
         {
             if (rig == null)
@@ -451,6 +599,7 @@ namespace SimJam.BarrelSimulator
             centerCamera.allowHDR = false;
         }
 
+        /// <summary>Ensures controller hand visuals exist and are toggled to match the setting, preferring Meta's hand assets and falling back to procedural primitives.</summary>
         private void EnsureControllerHandVisuals()
         {
             if (!m_showControllerHands || m_cameraRig == null)
@@ -479,6 +628,7 @@ namespace SimJam.BarrelSimulator
             SetControllerHandVisualActive(true);
         }
 
+        /// <summary>Enables or disables both controller hand visuals if they exist.</summary>
         private void SetControllerHandVisualActive(bool isActive)
         {
             if (m_leftHandVisual != null)
@@ -492,6 +642,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Builds a simple procedural hand (palm, wrist, thumb, four fingers with knuckles) parented to a controller anchor.</summary>
         private GameObject CreateControllerHandVisual(Transform anchor, bool isLeft)
         {
             var root = new GameObject(isLeft ? "Left Controller Hand Visual" : "Right Controller Hand Visual");
@@ -518,6 +669,7 @@ namespace SimJam.BarrelSimulator
             return root;
         }
 
+        /// <summary>Creates one collider-free primitive piece of a procedural hand at the given local transform.</summary>
         private static void CreateHandPart(Transform parent, string partName, PrimitiveType primitiveType, Vector3 localPosition, Quaternion localRotation, Vector3 localScale, Material material)
         {
             var part = GameObject.CreatePrimitive(primitiveType);
@@ -530,6 +682,7 @@ namespace SimJam.BarrelSimulator
             DisableCollider(part);
         }
 
+        /// <summary>Generates the full two-room shell: lab floor/walls/ceiling with a doorway, ceiling grid and lights, the adjoining home/spawn room, the connecting door, and home props.</summary>
         private void BuildRoomGeometry()
         {
             if (m_roomRoot != null)
@@ -573,6 +726,7 @@ namespace SimJam.BarrelSimulator
             BuildHomeRoomProps();
         }
 
+        /// <summary>Builds the shared wall as left/right side segments plus a header, leaving a centered doorway opening.</summary>
         private void CreateDoorwayWallSegments(string prefix, float wallCenterZ, float wallWidth, Material wallMaterial)
         {
             var safeDoorWidth = Mathf.Min(m_doorwayWidth, wallWidth - m_wallThickness * 2f);
@@ -585,6 +739,7 @@ namespace SimJam.BarrelSimulator
             CreateRoomCube($"{prefix} Header", new Vector3(0f, m_doorwayHeight + headerHeight * 0.5f, wallCenterZ), new Vector3(safeDoorWidth, headerHeight, m_wallThickness), wallMaterial);
         }
 
+        /// <summary>Builds the adjoining spawn/home room shell (floor, three walls, ceiling, grid, warm lights) south of the lab.</summary>
         private void BuildSpawnRoomGeometry(Material floorMaterial, Material wallMaterial, Material ceilingMaterial, Material gridMaterial, Material lightPanelMaterial)
         {
             var size = SpawnRoomSizeMeters;
@@ -602,6 +757,7 @@ namespace SimJam.BarrelSimulator
             BuildSpawnRoomLights(center, lightPanelMaterial);
         }
 
+        /// <summary>Lays down a drop-ceiling grid of thin strips (2ft tile pattern) over a room footprint.</summary>
         private void BuildCeilingGrid(Vector2 size, Vector3 center, Material gridMaterial)
         {
             const float tileSize = 0.61f;
@@ -620,6 +776,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Adds four emissive fluorescent light panels (each with a cool point light) to the lab ceiling.</summary>
         private void BuildFluorescentPanels(Vector3 center, Material lightPanelMaterial)
         {
             var panelPositions = new[]
@@ -646,6 +803,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Adds two warm light panels (each with a warm point light) to the spawn/home room ceiling.</summary>
         private void BuildSpawnRoomLights(Vector3 center, Material lightPanelMaterial)
         {
             var positions = new[]
@@ -670,6 +828,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Builds the hinged connecting door (two-tone faces, gold knobs on each side) and caches its pivot/knob transforms.</summary>
         private void BuildConnectingDoor(float sharedWallZ, Material brownDoorMaterial, Material whiteDoorMaterial, Material goldMaterial)
         {
             const float doorThickness = 0.055f;
@@ -693,6 +852,7 @@ namespace SimJam.BarrelSimulator
             m_spawnDoorKnob = CreateDoorKnob(m_doorPivot, "Spawn Side Gold Knob", new Vector3(doorWidth - 0.15f, 0.96f, -doorThickness * 0.5f - 0.055f), goldMaterial, false);
         }
 
+        /// <summary>Creates a collider-free knob (stem + sphere) on one face of the door and returns the knob sphere transform.</summary>
         private Transform CreateDoorKnob(Transform parent, string knobName, Vector3 localPosition, Material material, bool facesLab)
         {
             var stem = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
@@ -714,6 +874,7 @@ namespace SimJam.BarrelSimulator
             return knob.transform;
         }
 
+        /// <summary>Furnishes the spawn/home room with a rug, couch, coffee/side tables, a lamp, and a potted plant to establish the "home" mood.</summary>
         private void BuildHomeRoomProps()
         {
             var center = SpawnRoomCenter;
@@ -744,6 +905,7 @@ namespace SimJam.BarrelSimulator
             CreatePlant(center + new Vector3(1.35f, 0f, -1.15f), plantPotMaterial, plantLeafMaterial);
         }
 
+        /// <summary>Builds a table lamp (base, stem, shade) with a warm point light for home-room ambience.</summary>
         private void CreateLamp(Vector3 basePosition, Material shadeMaterial)
         {
             var stemMaterial = CreateMaterial(new Color(0.82f, 0.62f, 0.3f), "Lamp Stem");
@@ -782,6 +944,7 @@ namespace SimJam.BarrelSimulator
             light.shadows = LightShadows.None;
         }
 
+        /// <summary>Builds a potted plant (pot, stem, clustered leaf spheres) for the home room.</summary>
         private void CreatePlant(Vector3 basePosition, Material potMaterial, Material leafMaterial)
         {
             var pot = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
@@ -819,11 +982,13 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Convenience wrapper that creates a solid, collidable cube under the room root.</summary>
         private void CreateRoomCube(string cubeName, Vector3 localPosition, Vector3 localScale, Material material)
         {
             CreateChildCube(m_roomRoot, cubeName, localPosition, localScale, material, true);
         }
 
+        /// <summary>Creates a textured cube primitive under a parent, optionally disabling its collider, and returns it.</summary>
         private GameObject CreateChildCube(Transform parent, string cubeName, Vector3 localPosition, Vector3 localScale, Material material, bool colliderEnabled)
         {
             var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -841,6 +1006,7 @@ namespace SimJam.BarrelSimulator
             return cube;
         }
 
+        /// <summary>Assigns a shared material to a GameObject's renderer if it has one.</summary>
         private static void AssignMaterial(GameObject target, Material material)
         {
             var renderer = target.GetComponent<Renderer>();
@@ -850,6 +1016,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Disables a GameObject's collider if present (used for decorative, non-collidable pieces).</summary>
         private static void DisableCollider(GameObject target)
         {
             var collider = target.GetComponent<Collider>();
@@ -859,6 +1026,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Randomly generates the lab's tables and wall shelves for this layout attempt, registering their navigation footprints.</summary>
         private void BuildRandomizedScenarioProps()
         {
             EnsureScenarioRoot();
@@ -880,6 +1048,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Attempts (up to a fixed retry budget) to place a non-overlapping folding table in a random quadrant and records its PropInfo.</summary>
         private void TryCreateRandomTable(int tableIndex)
         {
             var tableMaterial = CreateMaterial(new Color(0.94f, 0.94f, 0.91f), "Plastic Folding Table");
@@ -933,6 +1102,7 @@ namespace SimJam.BarrelSimulator
             Debug.LogWarning("Could not create a non-overlapping folding table.");
         }
 
+        /// <summary>Mounts a multi-tier wall shelf on a random wall (using the shelf prefab per tier, or primitive boards as a fallback) and records its PropInfo and tier surfaces.</summary>
         private void TryCreateRandomShelf(int shelfIndex)
         {
             var shelfMaterial = CreateMaterial(new Color(0.9f, 0.91f, 0.9f), "Wall Shelf");
@@ -1027,6 +1197,7 @@ namespace SimJam.BarrelSimulator
             });
         }
 
+        /// <summary>Instantiates the shelf prefab for one tier, rescales it to the target length/depth, seats it against the wall at the requested surface height, and adds colliders; returns false if no prefab or bounds.</summary>
         private bool TryCreateShelfAssetTier(Transform shelfRoot, int tierIndex, float surfaceY, float targetLength, float targetDepth, out Bounds localBounds)
         {
             localBounds = default;
@@ -1073,6 +1244,7 @@ namespace SimJam.BarrelSimulator
             return true;
         }
 
+        /// <summary>Disables and destroys every collider under a prefab so custom fit-up colliders can replace them.</summary>
         private static void RemoveColliders(GameObject root)
         {
             foreach (var collider in root.GetComponentsInChildren<Collider>(true))
@@ -1082,6 +1254,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Adds non-convex mesh colliders matching each mesh under a shelf so drums rest on the real geometry; returns true if any were added.</summary>
         private static bool AddShelfMeshColliders(GameObject root)
         {
             var addedCollider = false;
@@ -1106,6 +1279,7 @@ namespace SimJam.BarrelSimulator
             return addedCollider;
         }
 
+        /// <summary>Computes the combined renderer bounds of a hierarchy expressed in another transform's local space; returns false if it has no renderers.</summary>
         private static bool TryGetLocalRendererBounds(Transform localSpace, GameObject root, out Bounds localBounds)
         {
             localBounds = default;
@@ -1145,6 +1319,7 @@ namespace SimJam.BarrelSimulator
             return hasBounds;
         }
 
+        /// <summary>Adds a thin box collider at the top of a shelf tier's bounds so drums have a flat surface to rest on.</summary>
         private static void AddShelfSurfaceCollider(Transform shelfRoot, Bounds localBounds, int tierIndex)
         {
             var colliderObject = new GameObject($"Shelf Surface Collider {tierIndex + 1}");
@@ -1158,6 +1333,7 @@ namespace SimJam.BarrelSimulator
                 Mathf.Max(0.05f, localBounds.size.z));
         }
 
+        /// <summary>Creates a collidable cube primitive for prop geometry (table tops/legs, primitive shelf boards) under a parent.</summary>
         private void CreatePropCube(Transform parent, string cubeName, Vector3 localPosition, Vector3 localScale, Material material)
         {
             var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -1173,6 +1349,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Rebuilds and shuffles the full set of candidate drum slots from the floor grid, table tops, and shelf tiers.</summary>
         private void BuildSpawnSlots()
         {
             m_spawnSlots.Clear();
@@ -1182,6 +1359,7 @@ namespace SimJam.BarrelSimulator
             Shuffle(m_spawnSlots);
         }
 
+        /// <summary>Generates floor slots on a grid, skipping the central aisle, the player clearance zone, and prop footprints.</summary>
         private void BuildFloorSlots()
         {
             var size = RoomSizeMeters;
@@ -1225,6 +1403,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Generates a spread of slots on each table top (center allows any size and possible sideways placement; edges take smaller drums only).</summary>
         private void BuildTableSlots()
         {
             foreach (var table in m_tables)
@@ -1267,6 +1446,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Generates evenly-spaced 5-gallon-only slots along each usable tier of every wall shelf, facing into the room.</summary>
         private void BuildShelfSlots()
         {
             foreach (var shelf in m_shelves)
@@ -1306,6 +1486,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Walks the shuffled slots and spawns drums up to the requested count, honoring per-surface spacing and floor line-of-sight rules; returns how many were placed.</summary>
         private ScenarioResult SpawnBarrelsForCurrentLayout(int requestedCount)
         {
             var result = new ScenarioResult();
@@ -1364,6 +1545,7 @@ namespace SimJam.BarrelSimulator
             return result;
         }
 
+        /// <summary>Builds the per-size drum spec table (prefab, dimensions, colour, selection weight) for the current layout pass.</summary>
         private Dictionary<BarrelSize, BarrelSpec> BuildBarrelSpecs()
         {
             return new Dictionary<BarrelSize, BarrelSpec>
@@ -1407,6 +1589,7 @@ namespace SimJam.BarrelSimulator
             };
         }
 
+        /// <summary>Returns the slot's allowed sizes ordered by weighted-random draw, so preferred sizes are tried first when placing a drum.</summary>
         private List<BarrelSize> BuildWeightedSizeOptions(SpawnSlot slot, Dictionary<BarrelSize, BarrelSpec> specs)
         {
             var options = new List<BarrelSize>();
@@ -1437,6 +1620,7 @@ namespace SimJam.BarrelSimulator
             return options;
         }
 
+        /// <summary>Instantiates one drum (prefab or placeholder) at a slot, orients/fits/seats it, ensures a collider, and initializes its BarrelInstance with a random radiation count.</summary>
         private BarrelInstance SpawnBarrel(SpawnSlot slot, BarrelSpec spec, bool isSideways)
         {
             EnsureScenarioRoot();
@@ -1474,6 +1658,7 @@ namespace SimJam.BarrelSimulator
             return barrel;
         }
 
+        /// <summary>Builds a simple colored cylinder stand-in drum when no prefab is assigned for a size.</summary>
         private GameObject CreatePlaceholderBarrel(Vector3 position, Quaternion rotation, BarrelSpec spec, bool isSideways)
         {
             var root = new GameObject($"Placeholder {spec.Label} Barrel");
@@ -1494,6 +1679,7 @@ namespace SimJam.BarrelSimulator
             return root;
         }
 
+        /// <summary>Rescales a spawned prefab so its renderer bounds match the spec's real-world diameter and height.</summary>
         private static void FitPrefabToPhysicalSize(GameObject barrelObject, BarrelSpec spec)
         {
             if (!TryGetRendererBounds(barrelObject, out var bounds))
@@ -1510,6 +1696,7 @@ namespace SimJam.BarrelSimulator
             barrelObject.transform.localScale = targetScale;
         }
 
+        /// <summary>Nudges a drum up/down so its lowest renderer point rests exactly on the given surface height.</summary>
         private static void AlignRendererBottomToSurface(GameObject barrelObject, float surfaceY)
         {
             if (!TryGetRendererBounds(barrelObject, out var bounds))
@@ -1520,6 +1707,7 @@ namespace SimJam.BarrelSimulator
             barrelObject.transform.position += Vector3.up * (surfaceY - bounds.min.y);
         }
 
+        /// <summary>Adds an approximate box collider sized to the spec if the drum has no collider, so it blocks navigation/aim raycasts.</summary>
         private static void EnsureApproximateCollider(GameObject barrelObject, BarrelSpec spec, bool isSideways)
         {
             if (barrelObject.GetComponentInChildren<Collider>() != null)
@@ -1542,6 +1730,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Computes the combined world-space renderer bounds of a hierarchy; returns false if it has no renderers.</summary>
         private static bool TryGetRendererBounds(GameObject root, out Bounds bounds)
         {
             var renderers = root.GetComponentsInChildren<Renderer>(true);
@@ -1567,6 +1756,7 @@ namespace SimJam.BarrelSimulator
             return hasBounds;
         }
 
+        /// <summary>Returns true if a candidate drum would keep the required spacing from all already-placed drums on comparable surfaces/heights.</summary>
         private bool IsSlotSpacingSafe(SpawnSlot slot, float radius, float spacing)
         {
             foreach (var placed in m_placedBarrels)
@@ -1586,6 +1776,7 @@ namespace SimJam.BarrelSimulator
             return true;
         }
 
+        /// <summary>For floor slots, returns false if an existing floor drum would fully occlude the candidate along the sight line from room center (keeps drums individually visible).</summary>
         private bool IsSlotVisibilitySafe(SpawnSlot slot, BarrelSpec spec)
         {
             if (slot.Surface == SurfaceKind.Shelf || slot.Surface == SurfaceKind.Table)
@@ -1628,6 +1819,7 @@ namespace SimJam.BarrelSimulator
             return true;
         }
 
+        /// <summary>Returns the configured minimum drum spacing for a given surface kind.</summary>
         private float GetSpacing(SurfaceKind surface)
         {
             return surface switch
@@ -1638,6 +1830,7 @@ namespace SimJam.BarrelSimulator
             };
         }
 
+        /// <summary>Per-frame locomotion: left-stick smooth movement, right-stick snap turning, and right-controller aim-and-trigger teleport.</summary>
         private void HandleLocomotion()
         {
             if (m_locomotionRoot == null)
@@ -1685,6 +1878,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Raycasts the teleport aim against the floor, validates the destination (range, walkability, closed-door crossing), and updates the marker position/color.</summary>
         private void UpdateTeleportTarget()
         {
             EnsureTeleportMarker();
@@ -1718,6 +1912,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Returns the aiming ray for teleport, preferring the right controller anchor and falling back to the head/camera.</summary>
         private Ray GetTeleportRay()
         {
             if (m_cameraRig != null && m_cameraRig.rightControllerAnchor != null)
@@ -1730,6 +1925,7 @@ namespace SimJam.BarrelSimulator
             return new Ray(cameraTransform.position, cameraTransform.forward);
         }
 
+        /// <summary>Lazily creates the flat teleport marker disc and its valid/invalid materials on first use.</summary>
         private void EnsureTeleportMarker()
         {
             if (m_teleportMarker != null)
@@ -1750,6 +1946,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Moves the locomotion root to a clamped, walkable world position (only if the destination is legal).</summary>
         private void MoveRigTo(Vector3 worldPosition)
         {
             if (m_locomotionRoot == null)
@@ -1765,6 +1962,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Toggles the door open/closed when a controller grip is pressed while near either knob, respecting the toggle cooldown.</summary>
         private void HandleDoorInteraction()
         {
             if (m_doorPivot == null || Time.time < m_nextDoorToggleTime)
@@ -1790,6 +1988,7 @@ namespace SimJam.BarrelSimulator
             m_nextDoorToggleTime = Time.time + m_doorToggleCooldown;
         }
 
+        /// <summary>Returns true if the controller is within the interaction radius of either door knob.</summary>
         private bool IsControllerNearDoorKnob(Transform controllerAnchor)
         {
             if (controllerAnchor == null)
@@ -1802,11 +2001,13 @@ namespace SimJam.BarrelSimulator
                    || IsPointNearTransform(controllerAnchor.position, m_spawnDoorKnob, radius);
         }
 
+        /// <summary>Returns true if a point is within a radius of a (non-null) target transform.</summary>
         private static bool IsPointNearTransform(Vector3 point, Transform target, float radius)
         {
             return target != null && Vector3.Distance(point, target.position) <= radius;
         }
 
+        /// <summary>Per-frame animates the door hinge toward its open or closed angle at the configured swing speed.</summary>
         private void UpdateDoorSwing()
         {
             if (m_doorPivot == null)
@@ -1819,6 +2020,7 @@ namespace SimJam.BarrelSimulator
             m_doorPivot.localRotation = Quaternion.Euler(0f, m_doorCurrentAngle, 0f);
         }
 
+        /// <summary>Rotates the rig about the player's head by the given yaw, then re-clamps to keep them in a legal position.</summary>
         private void SnapTurn(float yawDegrees)
         {
             if (m_locomotionRoot == null)
@@ -1831,6 +2033,7 @@ namespace SimJam.BarrelSimulator
             MoveRigTo(m_locomotionRoot.position);
         }
 
+        /// <summary>Returns true if a position is inside the walkable floor plan and clear of the closed door and all navigation obstacles.</summary>
         private bool IsWalkablePosition(Vector3 position)
         {
             var clamped = ClampToRoom(position);
@@ -1860,6 +2063,7 @@ namespace SimJam.BarrelSimulator
             return true;
         }
 
+        /// <summary>Clamps an out-of-bounds position to the nearest legal spot among the lab, the spawn room, or the doorway gap.</summary>
         private Vector3 ClampToRoom(Vector3 position)
         {
             if (IsInsideWalkableFloorPlan(position, m_playerRadius + 0.08f))
@@ -1893,12 +2097,14 @@ namespace SimJam.BarrelSimulator
             return bestCandidate;
         }
 
+        /// <summary>Returns true if the position is inside either room and not blocked by the solid part of the shared wall.</summary>
         private bool IsInsideWalkableFloorPlan(Vector3 position, float margin)
         {
             var insideRoom = IsInsideLabRoom(position, margin) || IsInsideSpawnRoom(position, margin);
             return insideRoom && !IsBlockedBySharedWall(position, margin);
         }
 
+        /// <summary>Returns true if a position falls within the closed door's blocking slab in the doorway.</summary>
         private bool IsInsideClosedDoorObstacle(Vector3 position, float padding)
         {
             var doorwayCenter = GetDoorwayCenter();
@@ -1908,6 +2114,7 @@ namespace SimJam.BarrelSimulator
                    && Mathf.Abs(position.z - doorwayCenter.z) <= halfDepth + padding * 0.5f;
         }
 
+        /// <summary>Returns true if a teleport segment would pass through the doorway while the door is closed (blocking cross-room teleports).</summary>
         private bool TeleportCrossesClosedDoor(Vector3 from, Vector3 to)
         {
             if (m_isDoorOpen)
@@ -1934,6 +2141,7 @@ namespace SimJam.BarrelSimulator
             return Mathf.Abs(crossingX) <= m_doorwayWidth * 0.5f + m_playerRadius;
         }
 
+        /// <summary>Returns true if a position lies within the lab room bounds (with a horizontal margin).</summary>
         private bool IsInsideLabRoom(Vector3 position, float margin)
         {
             var size = RoomSizeMeters;
@@ -1944,6 +2152,7 @@ namespace SimJam.BarrelSimulator
                    && position.z >= -halfDepth;
         }
 
+        /// <summary>Returns true if a position lies within the spawn/home room bounds (with a horizontal margin), open to the doorway on the north edge.</summary>
         private bool IsInsideSpawnRoom(Vector3 position, float margin)
         {
             var center = SpawnRoomCenter;
@@ -1956,6 +2165,7 @@ namespace SimJam.BarrelSimulator
                    && position.z <= northEdge;
         }
 
+        /// <summary>Returns true if a position sits against the solid (non-doorway) part of the shared wall between the two rooms.</summary>
         private bool IsBlockedBySharedWall(Vector3 position, float margin)
         {
             var wallZ = -RoomSizeMeters.y * 0.5f;
@@ -1963,6 +2173,7 @@ namespace SimJam.BarrelSimulator
             return Mathf.Abs(position.z - wallZ) < margin && Mathf.Abs(position.x) > doorHalfWidth;
         }
 
+        /// <summary>Clamps a position into an axis-aligned rectangle (center + size) with a margin, preserving its Y.</summary>
         private static Vector3 ClampToRect(Vector3 position, Vector3 center, Vector2 size, float margin)
         {
             var halfWidth = Mathf.Max(0.05f, size.x * 0.5f - margin);
@@ -1973,11 +2184,13 @@ namespace SimJam.BarrelSimulator
                 Mathf.Clamp(position.z, center.z - halfDepth, center.z + halfDepth));
         }
 
+        /// <summary>Returns the world-space center of the doorway on the shared wall.</summary>
         private Vector3 GetDoorwayCenter()
         {
             return new Vector3(0f, 0f, -RoomSizeMeters.y * 0.5f);
         }
 
+        /// <summary>Returns true if a prop footprint clears the central aisle and player start, does not overlap existing obstacles, and fits inside the room.</summary>
         private bool IsFootprintAllowed(ObstacleRect footprint, float padding)
         {
             if (RectTouchesCentralAisle(footprint, padding))
@@ -2001,6 +2214,7 @@ namespace SimJam.BarrelSimulator
             return IsRectInsideRoom(footprint, padding);
         }
 
+        /// <summary>Returns true if any corner or the center of a padded rectangle intrudes into the cross-shaped central aisle.</summary>
         private bool RectTouchesCentralAisle(ObstacleRect rect, float padding)
         {
             var samples = GetRectCorners(rect, padding);
@@ -2015,11 +2229,13 @@ namespace SimJam.BarrelSimulator
             return Mathf.Abs(rect.Center.x) < m_centralAisleWidth * 0.5f || Mathf.Abs(rect.Center.y) < m_centralAisleWidth * 0.5f;
         }
 
+        /// <summary>Returns true if a position lies within the cross-shaped central aisle kept clear through the lab.</summary>
         private bool IsInCentralAisle(Vector3 position)
         {
             return Mathf.Abs(position.x) < m_centralAisleWidth * 0.5f || Mathf.Abs(position.z) < m_centralAisleWidth * 0.5f;
         }
 
+        /// <summary>Returns true if a padded position falls inside any registered navigation obstacle.</summary>
         private bool IsInsideAnyNavigationObstacle(Vector3 position, float padding)
         {
             foreach (var obstacle in m_navigationObstacles)
@@ -2033,12 +2249,14 @@ namespace SimJam.BarrelSimulator
             return false;
         }
 
+        /// <summary>Returns true if a point (XZ) lies inside an oriented rectangle expanded by a padding.</summary>
         private static bool IsPointInsideRect(Vector3 point, ObstacleRect rect, float padding)
         {
             var local = Rotate(new Vector2(point.x, point.z) - rect.Center, -rect.YawDegrees);
             return Mathf.Abs(local.x) <= rect.HalfExtents.x + padding && Mathf.Abs(local.y) <= rect.HalfExtents.y + padding;
         }
 
+        /// <summary>Approximate oriented-rectangle overlap test: true if any padded corner of one rectangle lies inside the other.</summary>
         private static bool RectsOverlap(ObstacleRect a, ObstacleRect b, float padding)
         {
             foreach (var corner in GetRectCorners(a, padding))
@@ -2060,6 +2278,7 @@ namespace SimJam.BarrelSimulator
             return false;
         }
 
+        /// <summary>Returns true if every padded corner of a rectangle stays within the lab room bounds.</summary>
         private bool IsRectInsideRoom(ObstacleRect rect, float padding)
         {
             var size = RoomSizeMeters;
@@ -2076,6 +2295,7 @@ namespace SimJam.BarrelSimulator
             return true;
         }
 
+        /// <summary>Returns the four world-space (XZ) corners of an oriented rectangle expanded by a padding.</summary>
         private static Vector2[] GetRectCorners(ObstacleRect rect, float padding)
         {
             var half = rect.HalfExtents + Vector2.one * padding;
@@ -2095,6 +2315,7 @@ namespace SimJam.BarrelSimulator
             return corners;
         }
 
+        /// <summary>Rotates a 2D point about the origin by a yaw in degrees.</summary>
         private static Vector2 Rotate(Vector2 point, float yawDegrees)
         {
             var radians = yawDegrees * Mathf.Deg2Rad;
@@ -2103,6 +2324,7 @@ namespace SimJam.BarrelSimulator
             return new Vector2(point.x * cos - point.y * sin, point.x * sin + point.y * cos);
         }
 
+        /// <summary>Returns a random floor position in one of the four room quadrants, kept outside the central aisle, for placing a prop.</summary>
         private Vector3 GetRandomQuadrantPosition(float margin)
         {
             var size = RoomSizeMeters;
@@ -2115,6 +2337,7 @@ namespace SimJam.BarrelSimulator
             return new Vector3(x, 0f, z);
         }
 
+        /// <summary>Returns the XZ-plane distance between two points, ignoring height.</summary>
         private static float HorizontalDistance(Vector3 a, Vector3 b)
         {
             a.y = 0f;
@@ -2122,6 +2345,7 @@ namespace SimJam.BarrelSimulator
             return Vector3.Distance(a, b);
         }
 
+        /// <summary>Lazily creates the parent transform that holds all per-run scenario objects.</summary>
         private void EnsureScenarioRoot()
         {
             if (m_scenarioRoot != null)
@@ -2134,6 +2358,7 @@ namespace SimJam.BarrelSimulator
             m_scenarioRoot = scenarioObject.transform;
         }
 
+        /// <summary>In-place Fisher-Yates shuffle used to randomize slot ordering.</summary>
         private static void Shuffle<T>(IList<T> list)
         {
             for (var i = list.Count - 1; i > 0; i--)
@@ -2143,6 +2368,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Returns a random radiation count for a drum, from the assigned profile or the generated fallback pool.</summary>
         private int GetRandomRadiationCount()
         {
             if (m_radiationCountProfile != null)
@@ -2154,6 +2380,7 @@ namespace SimJam.BarrelSimulator
             return m_fallbackCountPool[UnityEngine.Random.Range(0, m_fallbackCountPool.Length)];
         }
 
+        /// <summary>Rebuilds the fallback count pool if it is missing or has the wrong size.</summary>
         private void EnsureFallbackCountPool()
         {
             if (m_fallbackCountPool == null || m_fallbackCountPool.Length != Mathf.Max(1, m_fallbackCountPoolSize))
@@ -2162,6 +2389,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Fills the fallback count pool with fresh random values within the configured min/max range.</summary>
         private void RebuildFallbackCountPool()
         {
             var safePoolSize = Mathf.Max(1, m_fallbackCountPoolSize);
@@ -2175,6 +2403,7 @@ namespace SimJam.BarrelSimulator
             }
         }
 
+        /// <summary>Returns a cached material for a colour/name, creating (and tracking for cleanup) a new URP-Lit-or-Standard material if none exists.</summary>
         private Material CreateMaterial(Color color, string materialName)
         {
             var key = $"{materialName}_{color.r:0.000}_{color.g:0.000}_{color.b:0.000}_{color.a:0.000}";
@@ -2193,11 +2422,13 @@ namespace SimJam.BarrelSimulator
             return material;
         }
 
+        /// <summary>Logs a status/diagnostic message prefixed with this spawner's name.</summary>
         private void SetStatus(string message)
         {
             Debug.Log($"BasicVRRoomBarrelSpawner: {message}");
         }
 
+        /// <summary>Unity lifecycle: destroys all runtime-created materials and clears the material cache to avoid leaks.</summary>
         private void OnDestroy()
         {
             foreach (var runtimeMaterial in m_runtimeMaterials)
@@ -2212,6 +2443,7 @@ namespace SimJam.BarrelSimulator
             m_materialCache.Clear();
         }
 
+        /// <summary>Unity editor callback: clamps inspector values to sane ranges (room/door sizes, min/max counts, aisle width).</summary>
         private void OnValidate()
         {
             m_roomSizeFeet.x = Mathf.Max(8f, m_roomSizeFeet.x);
@@ -2226,6 +2458,7 @@ namespace SimJam.BarrelSimulator
             m_centralAisleWidth = Mathf.Min(m_centralAisleWidth, Mathf.Min(RoomSizeMeters.x, RoomSizeMeters.y) * 0.45f);
         }
 
+        /// <summary>Unity editor callback: draws wireframe previews of the two rooms, doorway, player start, and central aisle when enabled.</summary>
         private void OnDrawGizmos()
         {
             if (!m_showEditorScalePreview)
@@ -2261,8 +2494,10 @@ namespace SimJam.BarrelSimulator
 
         }
 
+        /// <summary>Outcome of a single layout pass: how many drums were successfully placed.</summary>
         private struct ScenarioResult
         {
+            /// <summary>Number of drums placed during the pass.</summary>
             public int SpawnedCount;
         }
     }

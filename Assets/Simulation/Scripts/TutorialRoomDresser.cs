@@ -3,67 +3,107 @@ using UnityEngine;
 
 namespace SimJam.Tutorial
 {
+    /// <summary>
+    /// Procedurally "dresses" the TutorialRoom scene: builds all the non-interactive set decoration
+    /// (tables, shelving, storage bins, clutter, whiteboard, posters, floor scuffs, accent lights, etc.)
+    /// from Unity primitives and runtime materials so the near-empty bootstrap scene looks like a real
+    /// radiation-survey training bay. Runs both in the editor (for authoring preview) and once at runtime
+    /// (via Awake). The interactive gameplay props (detector, teaching barrels) are placed elsewhere by
+    /// TutorialRoomInteractionController; this component only owns the static backdrop.
+    /// </summary>
     [ExecuteAlways]
     [DisallowMultipleComponent]
     [AddComponentMenu("SimJam/Tutorial Room Dresser")]
     public class TutorialRoomDresser : MonoBehaviour
     {
         [Header("Prefabs")]
+        /// <summary>Optional 55-gallon drum model used by the (now-disabled) floor barrel clusters; procedural cylinder fallback if null.</summary>
         [SerializeField] private GameObject m_barrel55Prefab;
+        /// <summary>Optional 30-gallon drum model used by the (now-disabled) floor barrel clusters; procedural cylinder fallback if null.</summary>
         [SerializeField] private GameObject m_barrel30Prefab;
+        /// <summary>Optional small (5-gallon) drum model reserved for shelf/cluster decoration; currently unused by active build steps.</summary>
         [SerializeField] private GameObject m_barrel5Prefab;
 
         [Header("Barrel materials (assign the lab's authored barrel materials; empty = procedural fallback)")]
+        /// <summary>Lab's authored metal/black barrel material; when assigned, tutorial barrels match the lab, else a procedural fallback is used.</summary>
         [SerializeField] private Material m_barrelLargeMetal;
+        /// <summary>Lab's authored painted/gray barrel material; when assigned, tutorial barrels match the lab, else a procedural fallback is used.</summary>
         [SerializeField] private Material m_barrelLargePaint;
 
         [Header("Generation")]
+        /// <summary>When true, the dressing is (re)built while editing in the Unity editor (not in Play mode) for authoring preview.</summary>
         [SerializeField] private bool m_buildInEditor = true;
+        /// <summary>When true, the dressing is built once at runtime (in a build or Play mode) during Awake.</summary>
         [SerializeField] private bool m_buildAtRuntime = true;
 
+        /// <summary>Name of the child GameObject that holds every generated prop, so the whole dressing can be cleared/rebuilt in one call.</summary>
         private const string GeneratedRootName = "Tutorial Room Dressing (Generated)";
 
+        /// <summary>Guard so the runtime build happens exactly once (in Awake) and later OnEnable/Start calls don't re-clear the podium after the detector is placed.</summary>
         private bool m_builtAtRuntime;
 
+        /// <summary>Off-white plastic material for table tops.</summary>
         private Material m_tableMaterial;
+        /// <summary>Galvanized-metal material for table legs/rails, shelf decks, and whiteboard frames.</summary>
         private Material m_metalMaterial;
+        /// <summary>Dark near-black metal material for shelf uprights, binders, clock parts, and bin lids.</summary>
         private Material m_darkMetalMaterial;
+        /// <summary>Dark green plastic material for crates, storage bins, and clipboard boards.</summary>
         private Material m_crateMaterial;
+        /// <summary>Safety-orange material used for the procedural barrel fallback.</summary>
         private Material m_orangeMaterial;
+        /// <summary>Matte rubber-black material for clock hands and small details.</summary>
         private Material m_blackMaterial;
+        /// <summary>Dark rough material used for wall/floor scuff and scrape decals.</summary>
         private Material m_scuffMaterial;
+        /// <summary>Dusty concrete material for floor dust patches near shelves/tables.</summary>
         private Material m_dustMaterial;
+        /// <summary>Textured concrete material for covered caution-tape floor patches.</summary>
         private Material m_floorPatchMaterial;
+        /// <summary>Bright off-white material for the wall whiteboard surface.</summary>
         private Material m_whiteboardMaterial;
+        /// <summary>Textured material carrying the radiation-warning poster graphic.</summary>
         private Material m_radiationPosterMaterial;
+        /// <summary>Pale paper material for labels, checklists, and the clock face.</summary>
         private Material m_labelMaterial;
+        /// <summary>Blue stencil material for binders and whiteboard marker lines.</summary>
         private Material m_blueMaterial;
+        /// <summary>Resolved black-barrel material: the assigned lab metal material if present, else a procedural fallback.</summary>
         private Material m_barrelBlackMaterial;
+        /// <summary>Resolved gray-barrel material: the assigned lab paint material if present, else a procedural fallback.</summary>
         private Material m_barrelGrayMaterial;
 
         // Match the lab's barrel model scale (RadiationLabRoom m_barrel55/30ModelScale) so tutorial
         // barrels are the same size as the lab. Only the height (Y) differed — they were too tall.
+        /// <summary>Local scale for 55-gallon floor drums, matched to the lab so tutorial barrels are the same size.</summary>
         private static readonly Vector3 FloorBarrel55Scale = new Vector3(0.19567f, 0.1853504f, 0.19567f);
+        /// <summary>Local scale for 30-gallon floor drums, matched to the lab.</summary>
         private static readonly Vector3 FloorBarrel30Scale = new Vector3(0.14f, 0.14f, 0.14f);
+        /// <summary>Local scale for small shelf-stored barrels.</summary>
         private static readonly Vector3 ShelfSmallBarrelScale = new Vector3(0.12f, 0.12f, 0.12f);
         // Floor spot for the detector podium; must match TutorialRoomInteractionController.m_detectorHomePosition X/Z.
+        /// <summary>Floor position for the detector pedestal; its X/Z must match the interaction controller's detector home position.</summary>
         private static readonly Vector3 DetectorPodiumFloor = new Vector3(-2.25f, 0f, -1.5f);
 
+        /// <summary>Unity lifecycle hook; builds the dressing at runtime (once) or refreshes it in the editor.</summary>
         private void Awake()
         {
             RebuildIfAllowed();
         }
 
+        /// <summary>Unity lifecycle hook; refreshes the editor preview when the component is enabled (runtime build is skipped once already built).</summary>
         private void OnEnable()
         {
             RebuildIfAllowed();
         }
 
+        /// <summary>Unity lifecycle hook; another rebuild opportunity for the editor preview (runtime build is skipped once already built).</summary>
         private void Start()
         {
             RebuildIfAllowed();
         }
 
+        /// <summary>Rebuilds the dressing only when the current context (editor vs. runtime) is enabled and, at runtime, only the first time.</summary>
         private void RebuildIfAllowed()
         {
             if (!isActiveAndEnabled)
@@ -95,6 +135,11 @@ namespace SimJam.Tutorial
             }
         }
 
+        /// <summary>
+        /// Clears any previous dressing, hides legacy scene props, (re)creates the runtime materials, and
+        /// rebuilds the full set of decoration under a single generated root. Exposed via the component
+        /// context menu and the editor tools menu so authors can regenerate on demand.
+        /// </summary>
         [ContextMenu("Rebuild Tutorial Dressing")]
         public void BuildRoomDressing()
         {
@@ -118,6 +163,7 @@ namespace SimJam.Tutorial
             BuildLighting(root.transform);
         }
 
+        /// <summary>Destroys the existing generated-dressing root (if any) so a fresh rebuild starts clean; uses immediate destroy in the editor.</summary>
         private void ClearGeneratedRoot()
         {
             var existing = transform.Find(GeneratedRootName);
@@ -136,6 +182,7 @@ namespace SimJam.Tutorial
             }
         }
 
+        /// <summary>Deactivates any baked/legacy scene objects named "Barrel" or "shelf" so only the procedurally-built dressing remains; runtime "...Drum..." teaching barrels are unaffected.</summary>
         private void HideLegacySceneProps()
         {
             foreach (var sceneTransform in Object.FindObjectsByType<Transform>())
@@ -155,6 +202,7 @@ namespace SimJam.Tutorial
             }
         }
 
+        /// <summary>Instantiates all runtime Standard-shader materials used by the dressing, resolving barrel materials to the lab's authored assets when available.</summary>
         private void CreateMaterials()
         {
             m_tableMaterial = CreateMaterial("Tutorial Table Plastic", new Color(0.82f, 0.82f, 0.78f), 0f, 0.34f, null);
@@ -180,6 +228,7 @@ namespace SimJam.Tutorial
                 : CreateMaterial("Tutorial White Barrel", new Color(0.78f, 0.80f, 0.78f), 0.35f, 0.4f, null);
         }
 
+        /// <summary>Creates a named Standard-shader material with the given base color, metallic, smoothness, and optional albedo texture.</summary>
         private static Material CreateMaterial(string materialName, Color color, float metallic, float smoothness, Texture2D texture)
         {
             var shader = Shader.Find("Standard");
@@ -194,12 +243,14 @@ namespace SimJam.Tutorial
             return material;
         }
 
+        /// <summary>Lays down the covered caution-tape floor strips that mark the central walking aisle.</summary>
         private void BuildAisle(Transform root)
         {
             CreateCube(root, "Covered Caution Tape South", new Vector3(0f, 0.012f, -1.98f), new Vector3(7.15f, 0.01f, 0.28f), m_floorPatchMaterial, false);
             CreateCube(root, "Covered Caution Tape Center", new Vector3(0f, 0.013f, -0.90f), new Vector3(7.15f, 0.01f, 0.28f), m_floorPatchMaterial, false);
         }
 
+        /// <summary>Adds thin decal quads for floor dust patches, floor scuffs/scrapes, and wall smudges to make the room feel used.</summary>
         private void BuildEnvironmentalWear(Transform root)
         {
             CreateCube(root, "Dust Patch Near Shelf", new Vector3(-2.72f, 0.021f, 2.55f), new Vector3(0.82f, 0.006f, 0.34f), m_dustMaterial, false, Quaternion.Euler(0f, 16f, 0f));
@@ -211,6 +262,7 @@ namespace SimJam.Tutorial
             CreateCube(root, "Back Wall Low Smudge", new Vector3(-1.72f, 0.72f, 3.875f), new Vector3(0.48f, 0.045f, 0.018f), m_scuffMaterial, false);
         }
 
+        /// <summary>Builds the spawn-side utility table plus a clipboard prop resting on it.</summary>
         private void BuildTrainingTables(Transform root)
         {
             var spawnTable = BuildUtilityTable(root, "Spawn-Side Hold-Up Table", new Vector3(-1.95f, 0f, -2.35f), Quaternion.Euler(0f, 8f, 0f), new Vector2(1.7f, 0.74f));
@@ -218,6 +270,7 @@ namespace SimJam.Tutorial
             // Detector now spawns on a floor podium (BuildDetectorPodium), not a table dock.
         }
 
+        /// <summary>Builds the concrete pedestal (reusing the lab's RoomDecorator pedestal) where the identiFINDER detector spawns for the grab step.</summary>
         private void BuildDetectorPodium(Transform root)
         {
             // Reuse the lab's concrete pedestal (top at PedestalTopHeight = 1.02 m, colliders enabled) so
@@ -228,6 +281,7 @@ namespace SimJam.Tutorial
             RoomDecorator.BuildDetectorPedestal(root, DetectorPodiumFloor, adapt);
         }
 
+        /// <summary>Assembles a clipboard prop (board, paper, metal clip, and checklist lines) from primitives at the given pose.</summary>
         private void BuildClipboard(Transform parent, string objectName, Vector3 position, Quaternion rotation)
         {
             var clipboard = new GameObject(objectName);
@@ -242,6 +296,7 @@ namespace SimJam.Tutorial
             CreateCube(clipboard.transform, "Checklist Line 3", new Vector3(0.015f, 0.032f, -0.039f), new Vector3(0.17f, 0.006f, 0.01f), m_darkMetalMaterial, false);
         }
 
+        /// <summary>Builds a utility table (top, back rail, four legs) of the given footprint and returns its root transform for placing props on top.</summary>
         private Transform BuildUtilityTable(Transform root, string objectName, Vector3 position, Quaternion rotation, Vector2 size)
         {
             var tableRoot = new GameObject(objectName);
@@ -261,6 +316,7 @@ namespace SimJam.Tutorial
             return tableRoot.transform;
         }
 
+        /// <summary>Builds the back-wall storage rack: three uprights, three shelf decks, storage bins, and shelf clutter (teaching barrels are spawned separately).</summary>
         private void BuildBackWallShelving(Transform root)
         {
             var shelfRoot = new GameObject("Back Wall Shelving With Barrels");
@@ -290,6 +346,7 @@ namespace SimJam.Tutorial
             BuildShelfClutter(shelfRoot.transform);
         }
 
+        /// <summary>Populates the shelves with decorative binders, sealed sample boxes, labels, and a glove box.</summary>
         private void BuildShelfClutter(Transform shelfRoot)
         {
             CreateCube(shelfRoot, "Shelf Binder Blue", new Vector3(-2.20f, 1.15f, -0.11f), new Vector3(0.11f, 0.36f, 0.26f), m_blueMaterial, false, Quaternion.Euler(0f, 0f, -3f));
@@ -300,6 +357,7 @@ namespace SimJam.Tutorial
             CreateCube(shelfRoot, "Flat Glove Box", new Vector3(-1.12f, 1.73f, -0.04f), new Vector3(0.48f, 0.12f, 0.30f), m_labelMaterial, false);
         }
 
+        /// <summary>Scatters floor-level storage bins and equipment cases around the room perimeter (floor barrel clusters are disabled).</summary>
         private void BuildClutter(Transform root)
         {
             CreateStorageBin(root, "Left Floor Storage Bin", new Vector3(-3.25f, 0.15f, -2.25f), new Vector3(0.58f, 0.28f, 0.44f));
@@ -312,13 +370,18 @@ namespace SimJam.Tutorial
 
         }
 
+        /// <summary>Arrangement presets for a floor barrel cluster, controlling how many drums and where they sit relative to a wall/corner/open floor.</summary>
         private enum BarrelClusterLayout
         {
+            /// <summary>A cluster arranged against a wall.</summary>
             WallCluster,
+            /// <summary>A cluster arranged into a room corner.</summary>
             CornerCluster,
+            /// <summary>A larger cluster standing in open floor space.</summary>
             OpenFloorCluster
         }
 
+        /// <summary>Spawns a group of 55/30-gallon floor drums in the given layout preset; retained for decoration but no longer invoked by the active build steps.</summary>
         private void BuildFloorBarrelCluster(Transform parent, string objectName, Vector3 position, Quaternion rotation, BarrelClusterLayout layout)
         {
             var clusterRoot = new GameObject(objectName);
@@ -353,6 +416,7 @@ namespace SimJam.Tutorial
             }
         }
 
+        /// <summary>Instantiates a barrel prefab at a local pose/scale, applies the given material to all renderers, and seats its bottom on the target surface height.</summary>
         private void SpawnAssetBarrel(Transform parent, GameObject prefab, string objectName, Vector3 position, Quaternion rotation, Vector3 scale, Material material, float surfaceY)
         {
             if (prefab == null)
@@ -369,6 +433,7 @@ namespace SimJam.Tutorial
             AlignRendererBottomToSurface(barrel, surfaceY);
         }
 
+        /// <summary>Mounts the left-wall radiation poster and builds the whiteboard and wall clock.</summary>
         private void BuildPostersAndWallMarks(Transform root)
         {
             CreateCube(root, "Left Wall Radiation Poster", new Vector3(-3.895f, 1.70f, 1.45f), new Vector3(0.025f, 0.72f, 0.54f), m_radiationPosterMaterial, false);
@@ -376,6 +441,7 @@ namespace SimJam.Tutorial
             BuildWallClock(root);
         }
 
+        /// <summary>Adds three low-cost vertex point lights (shelf accent, table task light, barrel-area fill) to give the room warmth and depth.</summary>
         private void BuildLighting(Transform root)
         {
             CreatePointLight(root, "Tutorial Shelf Accent Light", new Vector3(0f, 2.45f, 2.4f), new Color(0.75f, 0.9f, 1f), 0.65f, 3.6f);
@@ -383,6 +449,7 @@ namespace SimJam.Tutorial
             CreatePointLight(root, "Tutorial Barrel Cluster Fill Light", new Vector3(1.6f, 2.35f, 0.85f), new Color(0.86f, 0.92f, 1f), 0.50f, 4.2f);
         }
 
+        /// <summary>Builds the left-wall whiteboard: surface, framing rails, marker scribble lines, and an eraser.</summary>
         private void BuildWhiteboard(Transform root)
         {
             CreateCube(root, "Left Wall Whiteboard", new Vector3(-3.875f, 1.74f, -0.35f), new Vector3(0.025f, 0.72f, 1.35f), m_whiteboardMaterial, false);
@@ -396,6 +463,7 @@ namespace SimJam.Tutorial
             CreateCube(root, "Whiteboard Eraser", new Vector3(-3.82f, 1.39f, 0.12f), new Vector3(0.05f, 0.055f, 0.24f), m_darkMetalMaterial, false);
         }
 
+        /// <summary>Builds a decorative wall clock (rim, face, hour/minute hands, center pin) from cylinders and cubes.</summary>
         private void BuildWallClock(Transform root)
         {
             var clock = new GameObject("Spawn Wall Clock");
@@ -410,6 +478,7 @@ namespace SimJam.Tutorial
             CreateCylinder(clock.transform, "Clock Center Pin", new Vector3(0f, -0.022f, 0f), new Vector3(0.025f, 0.006f, 0.025f), m_blackMaterial, false);
         }
 
+        /// <summary>Creates a shadowless vertex-mode point light with the given color, intensity, and range under the parent.</summary>
         private void CreatePointLight(Transform parent, string objectName, Vector3 localPosition, Color color, float intensity, float range)
         {
             var lightObject = new GameObject(objectName);
@@ -424,6 +493,7 @@ namespace SimJam.Tutorial
             light.shadows = LightShadows.None;
         }
 
+        /// <summary>Builds a storage bin (crate body with a dark lid and a paper front label) at the given local pose/size.</summary>
         private void CreateStorageBin(Transform parent, string objectName, Vector3 localPosition, Vector3 localScale)
         {
             var bin = CreateCube(parent, objectName, localPosition, localScale, m_crateMaterial, true);
@@ -431,6 +501,7 @@ namespace SimJam.Tutorial
             CreateCube(bin.transform, "Front Label", new Vector3(0f, 0.05f, -0.515f), new Vector3(0.46f, 0.28f, 0.025f), m_labelMaterial, false);
         }
 
+        /// <summary>Spawns a single barrel from a prefab (seated on the surface) or, if none supplied, a procedural orange cylinder fallback.</summary>
         private void SpawnBarrel(Transform parent, GameObject prefab, string objectName, Vector3 position, Quaternion rotation, Vector3 scale, float surfaceY)
         {
             GameObject barrel;
@@ -449,6 +520,7 @@ namespace SimJam.Tutorial
             }
         }
 
+        /// <summary>Shifts the object vertically so the bottom of its combined renderer bounds rests exactly at the given world surface Y.</summary>
         private static void AlignRendererBottomToSurface(GameObject target, float surfaceY)
         {
             if (!TryGetRendererBounds(target, out var bounds))
@@ -459,6 +531,7 @@ namespace SimJam.Tutorial
             target.transform.position += Vector3.up * (surfaceY - bounds.min.y);
         }
 
+        /// <summary>Assigns the given shared material to every renderer in the object's hierarchy (no-op if target or material is null).</summary>
         private static void AssignMaterialToRenderers(GameObject target, Material material)
         {
             if (target == null || material == null)
@@ -472,6 +545,7 @@ namespace SimJam.Tutorial
             }
         }
 
+        /// <summary>Computes the encapsulated world-space bounds of all renderers under the object; returns false if it has none.</summary>
         private static bool TryGetRendererBounds(GameObject target, out Bounds bounds)
         {
             var renderers = target.GetComponentsInChildren<Renderer>();
@@ -493,6 +567,7 @@ namespace SimJam.Tutorial
             return hasBounds;
         }
 
+        /// <summary>Creates a cube primitive at the given local pose/scale with the material applied and its collider toggled; returns the new GameObject.</summary>
         private GameObject CreateCube(Transform parent, string objectName, Vector3 localPosition, Vector3 localScale, Material material, bool colliderEnabled, Quaternion? localRotation = null)
         {
             var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -506,6 +581,7 @@ namespace SimJam.Tutorial
             return cube;
         }
 
+        /// <summary>Creates a cylinder primitive at the given local pose/scale with the material applied and its collider toggled; returns the new GameObject.</summary>
         private GameObject CreateCylinder(Transform parent, string objectName, Vector3 localPosition, Vector3 localScale, Material material, bool colliderEnabled, Quaternion? localRotation = null)
         {
             var cylinder = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
@@ -519,6 +595,7 @@ namespace SimJam.Tutorial
             return cylinder;
         }
 
+        /// <summary>Creates a centered world-space TextMesh label at the given pose (helper for wall signage/text decoration).</summary>
         private static void AddWallText(Transform parent, string text, Vector3 position, Quaternion rotation, float characterSize, Color color, string objectName)
         {
             var textObject = new GameObject(objectName);
@@ -538,8 +615,10 @@ namespace SimJam.Tutorial
     }
 
 #if UNITY_EDITOR
+    /// <summary>Editor-only menu that regenerates the tutorial room dressing for every dresser in the open scene and marks the scene dirty.</summary>
     public static class TutorialRoomDresserEditorMenu
     {
+        /// <summary>Menu command (SimJam ▸ Rebuild Tutorial Room Dressing) that rebuilds all tutorial dressers in the active scene.</summary>
         [UnityEditor.MenuItem("SimJam/Rebuild Tutorial Room Dressing")]
         private static void RebuildTutorialRoomDressing()
         {

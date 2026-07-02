@@ -7,103 +7,179 @@ using UnityEngine.InputSystem;
 
 namespace SimJam.Tutorial
 {
+    /// <summary>
+    /// Drives all hands-on interaction in the <c>TutorialRoom</c> scene: it stands up the OVR player
+    /// rig, provides smooth-move/snap-turn/teleport locomotion, spawns a working identiFINDER detector
+    /// the player can grab, spawns two teaching barrels (one hot, one inert) so the player rehearses the
+    /// scan-and-submit loop, and unlocks the matching gated <see cref="TutorialManager"/> steps as the
+    /// player teleports, reads the detector, and correctly submits the radioactive barrel. Also spawns
+    /// the player's IK arms. Companion to <c>TutorialManager</c> (captions/gating) — this component is
+    /// the "doing" half of the tutorial.
+    /// </summary>
     [DisallowMultipleComponent]
     [AddComponentMenu("SimJam/Tutorial Room Interaction Controller")]
     public class TutorialRoomInteractionController : MonoBehaviour
     {
         [Header("Tutorial")]
+        /// <summary>The step-gating manager whose gated steps this controller completes; auto-found on the same object if unset.</summary>
         [SerializeField] private TutorialManager m_tutorialManager;
+        /// <summary>Index of the "teleport to the marker" step this controller completes when the player teleports.</summary>
         [SerializeField, Min(0)] private int m_teleportStepIndex = 4;
+        /// <summary>Index of the smooth-locomotion "walk" step (skipped when teleport is the chosen movement mode).</summary>
         [SerializeField, Min(0)] private int m_movementStepIndex = 3;
+        /// <summary>Index of the "grab the detector and read >= completion CPS" step this controller completes.</summary>
         [SerializeField, Min(0)] private int m_detectorStepIndex = 5;
 
         [Header("Player")]
+        /// <summary>The Meta OVR camera rig used as the player; auto-found or created at runtime if unset.</summary>
         [SerializeField] private OVRCameraRig m_cameraRig;
+        /// <summary>Transform moved/rotated by locomotion (the rig root, or the camera when no rig exists).</summary>
         [SerializeField] private Transform m_locomotionRoot;
+        /// <summary>The head/eye transform used for forward direction, teleport rays, and label billboarding.</summary>
         [SerializeField] private Transform m_cameraTransform;
+        /// <summary>When true, build a minimal OVRCameraRig at runtime if none is found in the scene.</summary>
         [SerializeField] private bool m_createOvrCameraRig = true;
+        /// <summary>Eye height applied to a flat (non-rig) camera so the editor view sits at standing height.</summary>
         [SerializeField] private float m_defaultEyeHeight = 1.6f;
+        /// <summary>Half-size of the play area (X,Z) used to clamp locomotion and teleport targets to the room.</summary>
         [SerializeField] private Vector2 m_roomHalfExtents = new Vector2(3.55f, 3.55f);
+        /// <summary>Inset from the room edge kept clear so the player cannot walk/teleport into the walls.</summary>
         [SerializeField, Min(0.05f)] private float m_edgeMargin = 0.28f;
 
         [Header("Movement")]
+        /// <summary>Enables left-thumbstick (or WASD in-editor) continuous locomotion.</summary>
         [SerializeField] private bool m_enableSmoothMove = true;
+        /// <summary>Continuous-move speed in metres per second.</summary>
         [SerializeField, Min(0.1f)] private float m_smoothMoveSpeed = 1.35f;
+        /// <summary>Enables right-thumbstick (or Q/E in-editor) snap turning.</summary>
         [SerializeField] private bool m_enableSnapTurn = true;
+        /// <summary>Degrees rotated per snap-turn flick.</summary>
         [SerializeField, Min(5f)] private float m_snapTurnDegrees = 30f;
+        /// <summary>Minimum seconds between snap turns to prevent rapid repeated rotation.</summary>
         [SerializeField, Min(0.05f)] private float m_snapTurnCooldown = 0.35f;
+        /// <summary>Thumbstick magnitude below which continuous-move input is ignored (deadzone).</summary>
         [SerializeField, Range(0.05f, 0.95f)] private float m_thumbstickDeadzone = 0.18f;
 
         [Header("Teleport")]
+        /// <summary>Enables point-and-click teleport locomotion via the right index trigger.</summary>
         [SerializeField] private bool m_enableTeleport = true;
+        /// <summary>Maximum ray distance (metres) at which a floor point counts as a valid teleport target.</summary>
         [SerializeField, Min(1f)] private float m_maxTeleportDistance = 10f;
+        /// <summary>Radius of the on-floor teleport reticle disc.</summary>
         [SerializeField, Min(0.05f)] private float m_teleportMarkerRadius = 0.28f;
 
         [Header("Detector")]
+        /// <summary>When true, spawn a working, grabbable identiFINDER detector in the tutorial room.</summary>
         [SerializeField] private bool m_spawnWorkingDetector = true;
+        /// <summary>When true, enable the geiger click audio on the tutorial detector.</summary>
         [SerializeField] private bool m_enableDetectorAudio;
+        /// <summary>World-space rest position of the detector on its podium before it is grabbed.</summary>
         [SerializeField] private Vector3 m_detectorHomePosition = new Vector3(-2.25f, 1.16f, -1.5f);
+        /// <summary>World-space rest rotation (Euler) of the detector on its podium.</summary>
         [SerializeField] private Vector3 m_detectorHomeEuler = new Vector3(0f, 98f, 90f);
+        /// <summary>Proximity radius within which a controller can grab the detector.</summary>
         [SerializeField, Min(0.05f)] private float m_detectorGrabRadius = 0.18f;
+        /// <summary>Smoothed CPS the held detector must read to complete the detector step.</summary>
         [SerializeField, Min(0f)] private float m_detectorCompletionCps = 3f;
         // Use the lab's identiFINDER prefab (same model) when assigned; null falls back to the
         // procedural DetectorModelBuilder wand.
+        /// <summary>Optional lab identiFINDER prefab; when null the detector is built procedurally.</summary>
         [SerializeField] private GameObject m_detectorPrefab;
+        /// <summary>Target height (metres) the prefab detector model is uniformly scaled to.</summary>
         [SerializeField, Min(0.05f)] private float m_detectorTargetHeight = 0.25f;
         // Held pose mirrors the lab's so the tutorial grip matches (defaults equal GrabbableTool's).
+        /// <summary>Local position of the detector relative to the hand while held (mirrors the lab grip).</summary>
         [SerializeField] private Vector3 m_detectorHeldLocalPosition = new Vector3(0f, 0.040f, 0.065f);
+        /// <summary>Local rotation (Euler) of the detector relative to the hand while held.</summary>
         [SerializeField] private Vector3 m_detectorHeldLocalEuler = new Vector3(55f, 0f, 0f);
 
         [Header("Teaching Barrels")]
         // Two barrels (one inert, one radioactive) the player scans + submits to practice the real
         // find-and-submit loop. Assign the lab's 55-gal barrel model so they match the mission barrels.
+        /// <summary>Optional 55-gal barrel model shared with the lab; when null teaching barrels are cylinders.</summary>
         [SerializeField] private GameObject m_teachingBarrelPrefab;
         // Kept far apart (opposite sides of the room) so the hot barrel's inverse-square field does
         // not bathe the inert one -- the player must walk up to each to see the contrast.
+        /// <summary>Floor position of the radioactive teaching barrel the player must submit.</summary>
         [SerializeField] private Vector3 m_hotBarrelPosition = new Vector3(2.8f, 0f, 0.3f);     // "SUBMIT THIS"
+        /// <summary>Floor position of the inert decoy barrel the player must not submit.</summary>
         [SerializeField] private Vector3 m_inertBarrelPosition = new Vector3(-2.8f, 0f, 0.3f);  // "DON'T SUBMIT"
+        /// <summary>Emitted activity (CPS) of the hot teaching barrel's radiation source.</summary>
         [SerializeField, Min(100f)] private float m_hotBarrelActivityCps = 6000f;
+        /// <summary>Index of the "submit the radioactive barrel" teaching step this controller completes.</summary>
         [SerializeField, Min(0)] private int m_teachingSubmitStepIndex = 6;
+        /// <summary>Half-angle (degrees) of the forgiving aim cone used to test which teaching barrel is submitted.</summary>
         [SerializeField, Range(4f, 35f)] private float m_teachingGuessConeAngle = 34f; // very forgiving "general area" aim
         [Header("Feedback audio")]
+        /// <summary>Chime played when the player correctly submits the hot barrel.</summary>
         [SerializeField] private AudioClip m_correctSubmitClip;
+        /// <summary>Sting played when the player wrongly submits the inert barrel.</summary>
         [SerializeField] private AudioClip m_incorrectSubmitClip;
 
         [Header("Arms")]
+        /// <summary>Mixamo arm model spawned once so the player sees IK-driven arms (mirrors the lab rig).</summary>
         [SerializeField] private GameObject m_customArmsPrefab;
         // Arm IK tunables (defaults match the lab rig). Adjust in the Inspector + re-Play to dial
         // orientation (body yaw), elbow naturalness (target reach + elbow pole), and the wrist.
+        /// <summary>Offset from the head to the chest/shoulder anchor the arms hang from.</summary>
         [SerializeField] private Vector3 m_armsChestOffset = new Vector3(0f, -0.2f, -0.05f); // lower attach
+        /// <summary>Extra body yaw (degrees) applied to the arm rig's facing direction.</summary>
         [SerializeField, Range(-180f, 180f)] private float m_armsBodyYawOffset;
+        /// <summary>Total arm reach length used by the IK so the hand meets the controller without floating.</summary>
         [SerializeField, Min(0.2f)] private float m_armsTargetReach = 0.64f; // sized so the IK arm reaches the controller (grab no longer floats)
+        /// <summary>Local elbow pole vector steering the natural bend of the IK elbow.</summary>
         [SerializeField] private Vector3 m_armsElbowPole = new Vector3(0.3f, -0.4f, -0.1f);
+        /// <summary>When true, the IK hand matches the controller's rotation.</summary>
         [SerializeField] private bool m_armsMatchHandToController = true;
         // Gentle finger curl on grab. MixamoArmRig now bends each bone around its own palm-ward axis
         // so it no longer disorients; flip the sign if fingers curl backward (away from the palm).
+        /// <summary>Degrees each finger bone curls toward the palm on grab.</summary>
         [SerializeField, Range(0f, 130f)] private float m_armsFingerCurlAngle = 30f;
+        /// <summary>Sign flipping the finger-curl direction if fingers bend away from the palm.</summary>
         [SerializeField] private float m_armsFingerCurlSign = -1f; // curl direction (flipped)
 
+        /// <summary>The on-floor teleport reticle disc primitive.</summary>
         private GameObject m_teleportMarker;
+        /// <summary>Renderer of the teleport marker, swapped between valid/invalid materials.</summary>
         private Renderer m_teleportMarkerRenderer;
+        /// <summary>Green glowing material shown when the current teleport target is valid.</summary>
         private Material m_validTeleportMaterial;
+        /// <summary>Red glowing material shown when there is no valid teleport target.</summary>
         private Material m_invalidTeleportMaterial;
+        /// <summary>World position the player will teleport to when the trigger is pressed.</summary>
         private Vector3 m_currentTeleportTarget;
+        /// <summary>True when <see cref="m_currentTeleportTarget"/> is a valid in-room floor point.</summary>
         private bool m_hasValidTeleportTarget;
+        /// <summary>Earliest time (<see cref="Time.time"/>) at which the next snap turn is allowed.</summary>
         private float m_nextSnapTurnTime;
+        /// <summary>Grab behaviour on the spawned detector.</summary>
         private GrabbableTool m_detectorGrabTool;
+        /// <summary>The spawned detector's radiation reading component.</summary>
         private RadiationDetector m_detector;
+        /// <summary>Cached UI laser pointer, checked so teleport does not fire while clicking a UI button.</summary>
         private VrUiPointer m_uiPointer;
+        /// <summary>The detector root transform, whose up axis defines the aim direction.</summary>
         private Transform m_detectorRootTf;
+        /// <summary>The detector's sensor tip, used as the origin of the teaching aim cone.</summary>
         private Transform m_detectorSensorTip;
+        /// <summary>The radioactive teaching barrel instance (the correct submit target).</summary>
         private GameObject m_hotBarrel;
+        /// <summary>The inert decoy teaching barrel instance.</summary>
         private GameObject m_inertBarrel;
+        /// <summary>Floating "SUBMIT THIS" label above the hot barrel.</summary>
         private Transform m_hotLabel;
+        /// <summary>Floating "DON'T SUBMIT" label above the inert barrel.</summary>
         private Transform m_inertLabel;
+        /// <summary>True once the player has correctly submitted the hot barrel (stops further submit checks).</summary>
         private bool m_teachingSolved;
+        /// <summary>True once the detector has been grabbed at least once (a precondition of the detector step).</summary>
         private bool m_detectorWasGrabbed;
+        /// <summary>The instantiated custom arms object.</summary>
         private GameObject m_customArmsInstance;
+        /// <summary>The IK rig component driving the custom arms.</summary>
         private MixamoArmRig m_customArmRig;
 
+        /// <summary>Applies the saved movement preference, links the tutorial manager, hides the unused movement slide, and resolves player references.</summary>
         private void Awake()
         {
             ApplyMovementPreference();
@@ -127,6 +203,7 @@ namespace SimJam.Tutorial
         // Apply the movement style chosen on the start screen (persisted via PlayerPrefs). If no choice
         // was recorded (e.g. this scene launched directly in-editor), keep the serialized flags. Snap
         // turn is left unchanged in both modes.
+        /// <summary>Overrides the smooth-move/teleport flags with the locomotion mode the player picked on the start screen.</summary>
         private void ApplyMovementPreference()
         {
             var mode = MovementPreference.Load();
@@ -142,6 +219,7 @@ namespace SimJam.Tutorial
             }
         }
 
+        /// <summary>Resolves player references then spawns the detector, teaching barrels, and custom arms.</summary>
         private void Start()
         {
             ResolvePlayerReferences();
@@ -155,6 +233,7 @@ namespace SimJam.Tutorial
             EnsureCustomArms();
         }
 
+        /// <summary>Per-frame pump: refreshes references and arms, runs locomotion/teleport, and checks the gated detector and submit steps.</summary>
         private void Update()
         {
             ResolvePlayerReferences();
@@ -173,6 +252,7 @@ namespace SimJam.Tutorial
             BillboardTeachingLabels();
         }
 
+        /// <summary>Finds or creates the OVR rig and caches the camera and locomotion-root transforms (falling back to Camera.main when there is no rig).</summary>
         private void ResolvePlayerReferences()
         {
             if (m_cameraRig == null)
@@ -207,6 +287,7 @@ namespace SimJam.Tutorial
             }
         }
 
+        /// <summary>Builds a floor-level OVRCameraRig (plus OVRManager and audio listener) at runtime, disabling the scene's default camera.</summary>
         private void CreateOvrCameraRig()
         {
             var defaultCamera = Camera.main;
@@ -232,6 +313,7 @@ namespace SimJam.Tutorial
             EnsureAudioListener();
         }
 
+        /// <summary>Applies the sim's standard center-eye camera settings (skybox clear, clip planes, stereo, MainCamera tag) to the given rig.</summary>
         private static void ConfigureRig(OVRCameraRig rig)
         {
             if (rig == null)
@@ -257,6 +339,7 @@ namespace SimJam.Tutorial
             centerCamera.gameObject.tag = "MainCamera";
         }
 
+        /// <summary>Adds an AudioListener to the rig's center eye if one is missing, so submit/geiger audio is audible.</summary>
         private void EnsureAudioListener()
         {
             if (m_cameraRig != null && m_cameraRig.centerEyeAnchor != null
@@ -266,6 +349,7 @@ namespace SimJam.Tutorial
             }
         }
 
+        /// <summary>Applies head-relative continuous locomotion and cooldown-gated snap turning from the thumbsticks (or editor keys).</summary>
         private void UpdateMovement()
         {
             if (m_locomotionRoot == null)
@@ -307,6 +391,7 @@ namespace SimJam.Tutorial
             }
         }
 
+        /// <summary>Reads the left thumbstick move vector, overridden by WASD keyboard input when running in-editor.</summary>
         private Vector2 ReadMoveAxis()
         {
             var axis = OVRInput.Get(OVRInput.RawAxis2D.LThumbstick);
@@ -327,6 +412,7 @@ namespace SimJam.Tutorial
             return axis;
         }
 
+        /// <summary>Reads the right thumbstick horizontal turn value, overridden by Q/E keyboard input when running in-editor.</summary>
         private float ReadTurnAxis()
         {
             var axis = OVRInput.Get(OVRInput.RawAxis2D.RThumbstick).x;
@@ -340,6 +426,7 @@ namespace SimJam.Tutorial
             return axis;
         }
 
+        /// <summary>Moves the locomotion root to a room-clamped position, pinning eye height when driving a flat (non-rig) camera.</summary>
         private void MoveRigTo(Vector3 worldPosition)
         {
             var clamped = ClampToRoom(worldPosition);
@@ -351,6 +438,7 @@ namespace SimJam.Tutorial
             m_locomotionRoot.position = clamped;
         }
 
+        /// <summary>Clamps a world position's X/Z inside the room's half-extents minus the edge margin.</summary>
         private Vector3 ClampToRoom(Vector3 position)
         {
             var xLimit = Mathf.Max(0.5f, m_roomHalfExtents.x - m_edgeMargin);
@@ -360,6 +448,7 @@ namespace SimJam.Tutorial
             return position;
         }
 
+        /// <summary>Rotates the locomotion root about the vertical axis through the head so the view stays centred during a snap turn.</summary>
         private void SnapTurn(float degrees)
         {
             if (m_locomotionRoot == null)
@@ -371,6 +460,7 @@ namespace SimJam.Tutorial
             m_locomotionRoot.RotateAround(pivot, Vector3.up, degrees);
         }
 
+        /// <summary>Updates the teleport reticle and, on trigger press over a valid floor point, moves the player there, spawns an arrival burst, and completes the teleport step. Suppressed while aiming at a clickable UI element.</summary>
         private void UpdateTeleport()
         {
             if (!m_enableTeleport || m_locomotionRoot == null)
@@ -404,6 +494,7 @@ namespace SimJam.Tutorial
             }
         }
 
+        /// <summary>Returns true on the frame the right index trigger (or the editor T key) is pressed to confirm a teleport.</summary>
         private bool WasTeleportPressed()
         {
             if (OVRInput.GetDown(OVRInput.RawButton.RIndexTrigger))
@@ -418,6 +509,7 @@ namespace SimJam.Tutorial
 #endif
         }
 
+        /// <summary>Raycasts the controller aim against the floor plane, computes a room-clamped target, and positions/recolours the reticle to show validity.</summary>
         private void UpdateTeleportTarget()
         {
             EnsureTeleportMarker();
@@ -449,6 +541,7 @@ namespace SimJam.Tutorial
             }
         }
 
+        /// <summary>Returns the teleport aim ray from the right controller anchor, falling back to the camera when no rig exists.</summary>
         private Ray GetTeleportRay()
         {
             if (m_cameraRig != null && m_cameraRig.rightControllerAnchor != null)
@@ -460,6 +553,7 @@ namespace SimJam.Tutorial
             return new Ray(camera.position, camera.forward);
         }
 
+        /// <summary>Lazily builds the flat cylinder teleport reticle and its valid/invalid glow materials, disabling its collider.</summary>
         private void EnsureTeleportMarker()
         {
             if (m_teleportMarker != null)
@@ -483,6 +577,7 @@ namespace SimJam.Tutorial
 
         // Spawns the Mixamo arms once (like the lab's EnsureCustomArms) so the tutorial shows the
         // player's arms. Uses MixamoArmRig's built-in default tunables.
+        /// <summary>Instantiates the custom arms once, gives their skinned meshes a plain skin material, and configures/initializes the <see cref="MixamoArmRig"/> IK from the serialized tunables.</summary>
         private void EnsureCustomArms()
         {
             if (m_customArmsPrefab == null || m_customArmsInstance != null || m_cameraRig == null)
@@ -525,6 +620,7 @@ namespace SimJam.Tutorial
             m_customArmRig.Initialize(m_cameraRig, m_customArmsInstance);
         }
 
+        /// <summary>Builds a grabbable, working identiFINDER (from prefab or procedurally), rests it kinematically on its podium, and wires up its grab behaviour, geiger audio, radiation reading, and screen binder plus the arm-recalibration hooks.</summary>
         private void SpawnWorkingDetector()
         {
             if (m_detectorGrabTool != null)
@@ -589,6 +685,7 @@ namespace SimJam.Tutorial
             }
         }
 
+        /// <summary>Spawns the hot ("SUBMIT THIS") and inert ("DON'T SUBMIT") teaching barrels once, giving the hot one a radiation source and each a floating label.</summary>
         private void SpawnTeachingBarrels()
         {
             if (m_hotBarrel != null || m_inertBarrel != null)
@@ -606,6 +703,7 @@ namespace SimJam.Tutorial
         }
 
         // One barrel matching the lab's 55-gal drum (same model + same approximate collider), on the floor.
+        /// <summary>Creates a single teaching barrel from the prefab (or a cylinder), fits it to drum size, gives it a collider, and seats its visible base on the floor.</summary>
         private GameObject CreateTeachingBarrel(string objectName, Vector3 floorPosition)
         {
             GameObject barrel = m_teachingBarrelPrefab != null
@@ -627,6 +725,7 @@ namespace SimJam.Tutorial
         }
 
         // Uniform-fit the model to ~0.9 m tall (the 55-gal height) so it matches the lab barrels.
+        /// <summary>Uniformly scales a barrel so its rendered height is ~0.9 m, matching the lab's 55-gal drums.</summary>
         private static void FitTeachingBarrel(GameObject barrel)
         {
             const float targetHeight = 0.9f;
@@ -643,6 +742,7 @@ namespace SimJam.Tutorial
         // The same collider the lab gives its barrels (EnsureApproximateCollider, 55-gal spec): a
         // BoxCollider sized 0.58 x 0.9 x 0.58 in world space, centered on the mesh. Skipped if the
         // prefab already ships a collider (then the teaching barrel uses the prefab's, like the lab).
+        /// <summary>Adds a 55-gal-sized BoxCollider centred on the barrel mesh, unless the prefab already provides a collider.</summary>
         private static void EnsureLabBarrelCollider(GameObject barrel)
         {
             if (barrel.GetComponentInChildren<Collider>() != null)
@@ -664,6 +764,7 @@ namespace SimJam.Tutorial
             }
         }
 
+        /// <summary>Computes the combined world-space renderer bounds of a barrel; returns false if it has no renderers.</summary>
         private static bool TryGetBarrelBounds(GameObject root, out Bounds bounds)
         {
             bounds = default;
@@ -690,6 +791,7 @@ namespace SimJam.Tutorial
         }
 
         // Floating text above a barrel (parented to the room so it stays unscaled + readable).
+        /// <summary>Creates a coloured floating <see cref="TextMesh"/> label anchored above a barrel's visible mesh.</summary>
         private Transform CreateBarrelLabel(GameObject barrel, string text, Color color)
         {
             var labelObject = new GameObject(barrel.name + " Label");
@@ -717,12 +819,14 @@ namespace SimJam.Tutorial
             return labelObject.transform;
         }
 
+        /// <summary>Rotates both barrel labels each frame so they always face the player.</summary>
         private void BillboardTeachingLabels()
         {
             FaceCamera(m_hotLabel);
             FaceCamera(m_inertLabel);
         }
 
+        /// <summary>Orients a single label to look at the camera (no-op if the label or camera is missing).</summary>
         private void FaceCamera(Transform label)
         {
             if (label == null || m_cameraTransform == null)
@@ -739,6 +843,7 @@ namespace SimJam.Tutorial
 
         // Submit (A button / pinch, the SAME control as the lab) aimed at the HOT barrel completes the
         // teaching step. Only active while that step is current and until solved once.
+        /// <summary>While the submit step is current, checks for a submit press and completes the step (with a win chime + "SUBMITTED" label) when aimed at the hot barrel, or plays a loss sting for the inert one.</summary>
         private void UpdateTeachingSubmit()
         {
             if (m_teachingSolved || m_tutorialManager == null
@@ -784,6 +889,7 @@ namespace SimJam.Tutorial
         }
 
         // Submit = A / index pinch; also X when the detector is held in the LEFT hand.
+        /// <summary>Returns true on the frame the submit control is pressed (A/pinch, or X when the detector is held in the left hand).</summary>
         private bool IsSubmitPressed()
         {
             return InputManager.IsButtonADownOrPinchStarted()
@@ -792,9 +898,11 @@ namespace SimJam.Tutorial
                     && OVRInput.GetDown(OVRInput.RawButton.X));
         }
 
+        /// <summary>Lazily created 2D audio source used to play the submit win/loss feedback clips.</summary>
         private AudioSource m_submitAudioSource;
 
         // Win chime on the hot barrel, loss sting on the inert one (2D so it's heard anywhere).
+        /// <summary>Plays the correct/incorrect submit clip through a lazily-created 2D audio source.</summary>
         private void PlaySubmitFeedback(bool correct)
         {
             var clip = correct ? m_correctSubmitClip : m_incorrectSubmitClip;
@@ -815,6 +923,7 @@ namespace SimJam.Tutorial
 
         // Lightweight aim test scoped to the two teaching barrels (cone from the detector sensor tip
         // along the detector's aim axis, with a dead-on raycast fallback). Mirrors the lab's GetAimedBarrel.
+        /// <summary>Returns whichever of the two teaching barrels the held detector is aimed at, using a forgiving cone from the sensor tip (with a raycast fallback), or null if none.</summary>
         private GameObject GetTeachingAimedBarrel()
         {
             if (m_detectorGrabTool == null || !m_detectorGrabTool.IsHeld
@@ -873,11 +982,13 @@ namespace SimJam.Tutorial
             return best;
         }
 
+        /// <summary>Grab callback that records the detector has been picked up (a precondition of the detector step).</summary>
         private void MarkDetectorGrabbed()
         {
             m_detectorWasGrabbed = true;
         }
 
+        /// <summary>Grab/release callback that re-syncs the arm rig's wrist twist so the held hand does not twist.</summary>
         private void RecalibrateArms()
         {
             if (m_customArmRig != null && m_customArmRig.IsReady)
@@ -886,11 +997,13 @@ namespace SimJam.Tutorial
             }
         }
 
+        /// <summary>Completes the detector step if it is the current tutorial step.</summary>
         private void CompleteDetectorStep()
         {
             m_tutorialManager?.CompleteStepIfCurrent(m_detectorStepIndex);
         }
 
+        /// <summary>Completes the detector step once the grabbed detector reads at or above the required smoothed CPS.</summary>
         private void UpdateDetectorCompletion()
         {
             if (m_detectorWasGrabbed && m_detector != null && m_detector.SmoothedCps >= m_detectorCompletionCps)
@@ -899,6 +1012,7 @@ namespace SimJam.Tutorial
             }
         }
 
+        /// <summary>Creates a Standard-shader material with the given colour and an emissive glow so it reads clearly in the headset.</summary>
         private static Material CreateMaterial(string materialName, Color color)
         {
             var material = new Material(Shader.Find("Standard")) { name = materialName, color = color };
@@ -910,6 +1024,7 @@ namespace SimJam.Tutorial
             return material;
         }
 
+        /// <summary>Unsubscribes the grab/release event handlers from the detector to avoid dangling references.</summary>
         private void OnDestroy()
         {
             if (m_detectorGrabTool != null)
